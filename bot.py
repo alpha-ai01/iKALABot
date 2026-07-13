@@ -54,8 +54,9 @@ def chat_with_ai(message):
         bot.reply_to(message, reply)
         
     except Exception as e:
+        print(f"เจอ Error แล้วจ้า: {e}", flush=True)  # <--- เติม , flush=True เข้าไป
         bot.reply_to(message, "ขออภัยครับ เกิดข้อผิดพลาดในการเชื่อมต่อกับ AI")
-        print(f"Error: {e}")
+
 
 if __name__ == "__main__":
     print("Bot is running...")
