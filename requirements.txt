@@ -1,2 +1,2 @@
-pyTelegramBotAPI==4.15.2
-groq==0.4.2
+pyTelegramBotAPI
+groq
