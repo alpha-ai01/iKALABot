@@ -19,7 +19,7 @@ def handle_message(message):
     try:
         chat_completion = client.chat.completions.create(
             messages=[{"role": "user", "content": message.text}],
-            model="llama3-8b-8192", # หรือชื่อ Model เดิมที่คุณใช้
+            model="llama-3.1-8b-instant", # หรือชื่อ Model เดิมที่คุณใช้
         )
         response_text = chat_completion.choices[0].message.content
         bot.reply_to(message, response_text)
