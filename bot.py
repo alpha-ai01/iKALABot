@@ -1,63 +1,46 @@
 import os
+from flask import Flask, request
 import telebot
-from groq import Groq
-import threading
-from http.server import BaseHTTPRequestHandler, HTTPServer
+from groq import Groq # ตรวจสอบให้แน่ใจว่า import ตัวนี้อยู่ (ถ้าใช้ไลบรารี Groq)
 
-# ==========================================
-# 1. ส่วนของเว็บเซิร์ฟเวอร์จำลอง (เพื่อหลอก Render)
-# ==========================================
-class DummyHandler(BaseHTTPRequestHandler):
-    def do_GET(self):
-        self.send_response(200)
-        self.send_header('Content-type', 'text/plain')
-        self.end_headers()
-        self.wfile.write(b"Bot is alive and running!")
+# --- ตั้งค่าเริ่มต้น ---
+API_TOKEN = 'ใส่_TOKEN_บอท_ของคุณ_ที่นี่'
+GROQ_API_KEY = 'ใส่_API_KEY_ของ_Groq_ที่นี่'
+# ถ้า URL ของ Render ไม่ใช่ ikalabot.onrender.com ให้แก้ตรงนี้
+WEBHOOK_URL = "https://ikalabot.onrender.com" 
 
-def run_dummy_server():
-    # Render จะส่งค่า Port มาให้ทาง Environment Variable
-    port = int(os.environ.get("PORT", 8080))
-    server = HTTPServer(('0.0.0.0', port), DummyHandler)
-    server.serve_forever()
-
-# สั่งให้เว็บเซิร์ฟเวอร์ทำงานแยกอีกเส้นทาง (Thread) เบื้องหลัง
-threading.Thread(target=run_dummy_server, daemon=True).start()
-
-
-# ==========================================
-# 2. ส่วนของบอท Telegram (ทำงานตามปกติ)
-# ==========================================
-TELEGRAM_TOKEN = os.environ.get("TELEGRAM_TOKEN")
-GROQ_API_KEY = os.environ.get("GROQ_API_KEY")
-
-bot = telebot.TeleBot(TELEGRAM_TOKEN)
+bot = telebot.TeleBot(API_TOKEN)
 client = Groq(api_key=GROQ_API_KEY)
+server = Flask(__name__)
 
-@bot.message_handler(commands=['start', 'help'])
-def send_welcome(message):
-    welcome_text = "สวัสดีครับ! ผมคือ AI Bot ที่ขับเคลื่อนด้วยความเร็วของ Groq พิมพ์ข้อความมาคุยกันได้เลยครับ"
-    bot.reply_to(message, welcome_text)
-
+# --- ส่วน Logic การคุยกับ AI (เอาโค้ดเดิมของคุณมาไว้ตรงนี้) ---
 @bot.message_handler(func=lambda message: True)
-def chat_with_ai(message):
+def handle_message(message):
     try:
         chat_completion = client.chat.completions.create(
-            messages=[
-                {
-                    "role": "user",
-                    "content": message.text,
-                }
-            ],
-            model="llama3-8b-8192", 
+            messages=[{"role": "user", "content": message.text}],
+            model="llama3-8b-8192", # หรือชื่อ Model เดิมที่คุณใช้
         )
-        reply = chat_completion.choices[0].message.content
-        bot.reply_to(message, reply)
-        
+        response_text = chat_completion.choices[0].message.content
+        bot.reply_to(message, response_text)
     except Exception as e:
-        print(f"เจอ Error แล้วจ้า: {e}", flush=True)  # <--- เติม , flush=True เข้าไป
         bot.reply_to(message, "ขออภัยครับ เกิดข้อผิดพลาดในการเชื่อมต่อกับ AI")
+        print(f"DEBUG_ERROR: {e}")
 
+# --- ส่วน Webhook (ไม่ต้องแก้ไข) ---
+@server.route('/' + API_TOKEN, methods=['POST'])
+def get_message():
+    json_str = request.get_data().decode('UTF-8')
+    update = telebot.types.Update.de_json(json_str)
+    bot.process_new_updates([update])
+    return "!", 200
+
+@server.route("/")
+def webhook():
+    bot.remove_webhook()
+    bot.set_webhook(url=f"{WEBHOOK_URL}/{API_TOKEN}")
+    return "Webhook set!", 200
 
 if __name__ == "__main__":
-    print("Bot is running...")
-    bot.infinity_polling()
+    # รันบนพอร์ต 10000 ตามที่ Render กำหนด
+    server.run(host="0.0.0.0", port=int(os.environ.get("PORT", 10000)))
