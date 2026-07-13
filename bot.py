@@ -1,13 +1,13 @@
 import os
-from flask import Flask, request
 import telebot
-from groq import Groq # ตรวจสอบให้แน่ใจว่า import ตัวนี้อยู่ (ถ้าใช้ไลบรารี Groq)
+from groq import Groq
 
-# --- ตั้งค่าเริ่มต้น ---
-API_TOKEN = 'ใส่_TOKEN_บอท_ของคุณ_ที่นี่'
-GROQ_API_KEY = 'ใส่_API_KEY_ของ_Groq_ที่นี่'
-# ถ้า URL ของ Render ไม่ใช่ ikalabot.onrender.com ให้แก้ตรงนี้
-WEBHOOK_URL = "https://ikalabot.onrender.com" 
+# ดึงค่าจาก Environment Variable ที่เราตั้งไว้ใน Render
+API_TOKEN = os.environ.get('API_TOKEN')
+GROQ_API_KEY = os.environ.get('GROQ_API_KEY')
+
+
+# ... โค้ดส่วนที่เหลือเหมือนเดิม ...
 
 bot = telebot.TeleBot(API_TOKEN)
 client = Groq(api_key=GROQ_API_KEY)
