@@ -3,28 +3,32 @@ import telebot
 from flask import Flask, request, abort
 from groq import Groq
 
-# ---------------------------------------------------------
-# 1. โหลดตั้งค่าและ API Keys
-# ---------------------------------------------------------
+# 1. ดึงข้อมูลจาก Environment ของ Render
 TOKEN = os.environ.get('TELEGRAM_TOKEN')
 GROQ_API = os.environ.get('GROQ_API_KEY')
-APP_URL = "https://ikalabot.onrender.com"  # หากเปลี่ยนชื่อโปรเจกต์ใน Render ต้องมาเปลี่ยนตรงนี้ด้วย
+APP_URL = "https://ikalabot.onrender.com"  # URL ของคุณบน Render
 
-# ---------------------------------------------------------
-# 2. เริ่มต้นระบบ (Initialize)
-# ---------------------------------------------------------
 bot = telebot.TeleBot(TOKEN)
 app = Flask(__name__)
-client = Groq(api_key=GROQ_API)
 
-# ---------------------------------------------------------
-# 3. Webhook Endpoint สำหรับรับข้อมูลจาก Telegram
-# ---------------------------------------------------------
+# ตรวจสอบเบื้องต้นว่ามี API Key อยู่ในระบบไหม
+if not GROQ_API:
+    print("❌ ไม่พบ GROQ_API_KEY ในระบบ Environment Variables!")
+else:
+    print("🔑 ตรวจพบ GROQ_API_KEY ในระบบแล้ว")
+
+# เริ่มต้นระบบ Groq
+try:
+    client = Groq(api_key=GROQ_API)
+except Exception as e:
+    print(f"❌ ไม่สามารถโหลด Groq Client ได้: {e}")
+    client = None
+
+# 2. Webhook Endpoint
 @app.route('/' + TOKEN, methods=['POST'])
 def webhook():
-    # ตรวจสอบว่าเป็นข้อมูล JSON จาก Telegram จริงๆ
     if request.headers.get('content-type') == 'application/json':
-        # ใช้ get_data(as_text=True) ซึ่งเป็นวิธีมาตรฐานและปลอดภัยที่สุดของ Flask
+        # ใช้ get_data วิธีมาตรฐาน ปลอดภัย ไม่พังแน่นอน
         json_string = request.get_data(as_text=True)
         update = telebot.types.Update.de_json(json_string)
         bot.process_new_updates([update])
@@ -32,48 +36,43 @@ def webhook():
     else:
         abort(403)
 
-# ---------------------------------------------------------
-# 4. Route สำหรับ Health Check (ให้ Render ตรวจสอบสถานะ)
-# ---------------------------------------------------------
+# 3. หน้าบ้านสำหรับให้ Render เช็คสถานะ (Health Check)
 @app.route('/', methods=['GET', 'HEAD'])
 def index():
-    # ป้องกัน Error ใน Log เวลา Render ยิงมาเช็คว่าเซิร์ฟเวอร์ยังไม่ตาย
-    return "Bot is running on Render!", 200
+    return "Bot is running perfectly on Render!", 200
 
-# ---------------------------------------------------------
-# 5. ฟังก์ชันหลัก: ประมวลผลข้อความและตอบกลับด้วย AI
-# ---------------------------------------------------------
+# 4. ฟังก์ชันจัดการเมื่อได้รับข้อความ
 @bot.message_handler(func=lambda message: True)
 def handle_message(message):
+    print(f"📩 ได้รับข้อความ: {message.text}")
+    
+    if not GROQ_API or not client:
+        bot.reply_to(message, "❌ AI ไม่พร้อมใช้งานเนื่องจากไม่ได้ตั้งค่า GROQ_API_KEY")
+        return
+
     try:
-        # แสดงสถานะ "กำลังพิมพ์..." ให้ผู้ใช้เห็นระหว่างรอ AI ประมวลผล
+        # แสดงสถานะ "กำลังพิมพ์..."
         bot.send_chat_action(message.chat.id, 'typing')
         
-        # ส่งข้อความไปให้ Groq (Llama3) ประมวลผล
+        # ส่งข้อความไปให้ Groq AI
         chat_completion = client.chat.completions.create(
             messages=[{"role": "user", "content": message.text}],
             model="llama3-8b-8192",
         )
         
-        # ดึงข้อความที่ AI ตอบกลับมา
+        # ส่งคำตอบกลับไปหาผู้ใช้
         reply_text = chat_completion.choices[0].message.content
-        
-        # ส่งกลับไปยัง Telegram
         bot.reply_to(message, reply_text)
+        print("📤 ตอบกลับด้วย AI สำเร็จ")
         
     except Exception as e:
-        # หาก Groq API มีปัญหา หรือมี Error อื่นๆ จะได้แจ้งเตือน
-        bot.reply_to(message, "ขออภัยครับ ระบบ AI เกิดข้อผิดพลาด กรุณาลองใหม่อีกครั้ง")
-        print(f"AI Error: {e}")
+        # พ่น Error จริงๆ ออกมาในแชทให้เห็นเลยว่า AI พังเพราะอะไร!
+        print(f"❌ AI Error: {e}")
+        bot.reply_to(message, f"⚠️ AI เกิดข้อผิดพลาด:\n`{str(e)}`", parse_mode="Markdown")
 
-# ---------------------------------------------------------
-# 6. คำสั่งเปิดใช้งานเซิร์ฟเวอร์
-# ---------------------------------------------------------
 if __name__ == "__main__":
-    # ล้าง Webhook เก่าที่อาจค้างอยู่ และตั้งค่า Webhook ใหม่ไปที่ Render
     bot.remove_webhook()
     bot.set_webhook(url=f"{APP_URL}/{TOKEN}")
     
-    # รัน Flask Server ด้วย Port ที่ Render กำหนด
     port = int(os.environ.get("PORT", 10000))
     app.run(host="0.0.0.0", port=port)
