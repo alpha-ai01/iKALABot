@@ -3,9 +3,12 @@ from flask import Flask, request
 import telebot
 from groq import Groq
 
-# ดึงค่าจาก Environment Variables
-API_TOKEN = os.environ.get('API_TOKEN')
-GROQ_API_KEY = os.environ.get('GROQ_API_KEY')
+# เปลี่ยนบรรทัดนี้ใน bot.py
+API_TOKEN = os.environ.get('TELEGRAM_TOKEN') 
+# (จากเดิมที่เป็น 'API_TOKEN' ให้แก้เป็น 'TELEGRAM_TOKEN' ให้ตรงกับใน Render ของคุณครับ)
+
+GROQ_API_KEY = os.environ.get('GROQ_API_KEY') 
+# บรรทัดนี้ถูกแล้วครับ
 
 bot = telebot.TeleBot(API_TOKEN)
 client = Groq(api_key=GROQ_API_KEY)
