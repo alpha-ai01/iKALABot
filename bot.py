@@ -6,13 +6,6 @@ from groq import Groq
 API_TOKEN = os.environ.get('API_TOKEN')
 GROQ_API_KEY = os.environ.get('GROQ_API_KEY')
 
-
-# ... โค้ดส่วนที่เหลือเหมือนเดิม ...
-
-bot = telebot.TeleBot(API_TOKEN)
-client = Groq(api_key=GROQ_API_KEY)
-server = Flask(__name__)
-
 # --- ส่วน Logic การคุยกับ AI (เอาโค้ดเดิมของคุณมาไว้ตรงนี้) ---
 @bot.message_handler(func=lambda message: True)
 def handle_message(message):
