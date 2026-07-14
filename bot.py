@@ -54,11 +54,12 @@ def handle_message(message):
         # แสดงสถานะ "กำลังพิมพ์..."
         bot.send_chat_action(message.chat.id, 'typing')
         
-        # ส่งข้อความไปให้ Groq AI
+                # ส่งข้อความไปให้ Groq AI
         chat_completion = client.chat.completions.create(
             messages=[{"role": "user", "content": message.text}],
-            model="llama3-8b-8192",
+            model="llama3-8b-8192",  # ❌ ตัวเก่าที่ถูกปลดระวางแล้ว
         )
+
         
         # ส่งคำตอบกลับไปหาผู้ใช้
         reply_text = chat_completion.choices[0].message.content
