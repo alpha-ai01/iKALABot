@@ -28,7 +28,6 @@ except Exception as e:
 @app.route('/' + TOKEN, methods=['POST'])
 def webhook():
     if request.headers.get('content-type') == 'application/json':
-        # ใช้ get_data วิธีมาตรฐาน ปลอดภัย ไม่พังแน่นอน
         json_string = request.get_data(as_text=True)
         update = telebot.types.Update.de_json(json_string)
         bot.process_new_updates([update])
@@ -54,12 +53,11 @@ def handle_message(message):
         # แสดงสถานะ "กำลังพิมพ์..."
         bot.send_chat_action(message.chat.id, 'typing')
         
-                # ส่งข้อความไปให้ Groq AI
+        # ส่งข้อความไปให้ Groq AI (ใช้โมเดลใหม่ที่ใช้งานได้จริง)
         chat_completion = client.chat.completions.create(
             messages=[{"role": "user", "content": message.text}],
-            model="llama3-8b-8192",  # ❌ ตัวเก่าที่ถูกปลดระวางแล้ว
+            model="llama-3.1-8b-instant",  # อัปเดตเป็นโมเดลรุ่นใหม่แล้วเรียบร้อย!
         )
-
         
         # ส่งคำตอบกลับไปหาผู้ใช้
         reply_text = chat_completion.choices[0].message.content
@@ -67,7 +65,7 @@ def handle_message(message):
         print("📤 ตอบกลับด้วย AI สำเร็จ")
         
     except Exception as e:
-        # พ่น Error จริงๆ ออกมาในแชทให้เห็นเลยว่า AI พังเพราะอะไร!
+        # พ่น Error จริงๆ ออกมาในแชทให้เห็นเลยว่า AI พังเพราะอะไร
         print(f"❌ AI Error: {e}")
         bot.reply_to(message, f"⚠️ AI เกิดข้อผิดพลาด:\n`{str(e)}`", parse_mode="Markdown")
 
