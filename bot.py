@@ -1,62 +1,35 @@
 import os
 import telebot
+from flask import Flask, request
 from groq import Groq
-import threading
-from http.server import BaseHTTPRequestHandler, HTTPServer
 
-# ==========================================
-# 1. ส่วนของเว็บเซิร์ฟเวอร์จำลอง (เพื่อหลอก Render)
-# ==========================================
-class DummyHandler(BaseHTTPRequestHandler):
-    def do_GET(self):
-        self.send_response(200)
-        self.send_header('Content-type', 'text/plain')
-        self.end_headers()
-        self.wfile.write(b"Bot is alive and running!")
+TOKEN = os.environ.get('TELEGRAM_TOKEN')
+GROQ_API = os.environ.get('GROQ_API_KEY')
 
-def run_dummy_server():
-    # Render จะส่งค่า Port มาให้ทาง Environment Variable
-    port = int(os.environ.get("PORT", 8080))
-    server = HTTPServer(('0.0.0.0', port), DummyHandler)
-    server.serve_forever()
+bot = telebot.TeleBot(TOKEN)
+app = Flask(__name__)
+client = Groq(api_key=GROQ_API)
 
-# สั่งให้เว็บเซิร์ฟเวอร์ทำงานแยกอีกเส้นทาง (Thread) เบื้องหลัง
-threading.Thread(target=run_dummy_server, daemon=True).start()
-
-
-# ==========================================
-# 2. ส่วนของบอท Telegram (ทำงานตามปกติ)
-# ==========================================
-TELEGRAM_TOKEN = os.environ.get("TELEGRAM_TOKEN")
-GROQ_API_KEY = os.environ.get("GROQ_API_KEY")
-
-bot = telebot.TeleBot(TELEGRAM_TOKEN)
-client = Groq(api_key=GROQ_API_KEY)
-
-@bot.message_handler(commands=['start', 'help'])
-def send_welcome(message):
-    welcome_text = "สวัสดีครับ! ผมคือ AI Bot ที่ขับเคลื่อนด้วยความเร็วของ Groq พิมพ์ข้อความมาคุยกันได้เลยครับ"
-    bot.reply_to(message, welcome_text)
+@app.route('/' + TOKEN, methods=['POST'])
+def webhook():
+    json_str = request.get_stream().read().decode('utf-8')
+    update = telebot.types.Update.de_json(json_str)
+    bot.process_new_updates([update])
+    return '!', 200
 
 @bot.message_handler(func=lambda message: True)
-def chat_with_ai(message):
+def echo_all(message):
     try:
         chat_completion = client.chat.completions.create(
-            messages=[
-                {
-                    "role": "user",
-                    "content": message.text,
-                }
-            ],
-            model="llama3-8b-8192", 
+            messages=[{"role": "user", "content": message.text}],
+            model="llama3-8b-8192",
         )
-        reply = chat_completion.choices[0].message.content
-        bot.reply_to(message, reply)
-        
+        bot.reply_to(message, chat_completion.choices[0].message.content)
     except Exception as e:
-        bot.reply_to(message, "ขออภัยครับ เกิดข้อผิดพลาดในการเชื่อมต่อกับ AI")
-        print(f"Error: {e}")
+        bot.reply_to(message, "ขออภัยครับ เกิดข้อผิดพลาด")
 
 if __name__ == "__main__":
-    print("Bot is running...")
-    bot.infinity_polling()
+    # การตั้งค่า Webhook (รันครั้งเดียว)
+    bot.remove_webhook()
+    bot.set_webhook(url=f"https://ikalabot.onrender.com/{TOKEN}")
+    app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 10000)))
