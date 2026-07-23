@@ -1,77 +1,78 @@
 import os
-import telebot
-from flask import Flask, request, abort
-from groq import Groq
+import logging
+import threading
+from flask import Flask
+from dotenv import load_dotenv
+from telegram import Update
+from telegram.ext import ApplicationBuilder, CommandHandler, MessageHandler, filters, ContextTypes
+import google.generativeai as genai
 
-# 1. ดึงข้อมูลจาก Environment ของ Render
-TOKEN = os.environ.get('TELEGRAM_TOKEN')
-GROQ_API = os.environ.get('GROQ_API_KEY')
-APP_URL = "https://ikalabot.onrender.com"  # URL ของคุณบน Render
+load_dotenv()
 
-bot = telebot.TeleBot(TOKEN)
-app = Flask(__name__)
+TELEGRAM_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
+GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
 
-# ตรวจสอบเบื้องต้นว่ามี API Key อยู่ในระบบไหม
-if not GROQ_API:
-    print("❌ ไม่พบ GROQ_API_KEY ในระบบ Environment Variables!")
-else:
-    print("🔑 ตรวจพบ GROQ_API_KEY ในระบบแล้ว")
+if GEMINI_API_KEY:
+    genai.configure(api_key=GEMINI_API_KEY)
+model = genai.GenerativeModel("gemini-1.5-flash")
 
-# เริ่มต้นระบบ Groq
-try:
-    client = Groq(api_key=GROQ_API)
-except Exception as e:
-    print(f"❌ ไม่สามารถโหลด Groq Client ได้: {e}")
-    client = None
+web_app = Flask(__name__)
 
-# 2. Webhook Endpoint
-@app.route('/' + TOKEN, methods=['POST'])
-def webhook():
-    if request.headers.get('content-type') == 'application/json':
-        json_string = request.get_data(as_text=True)
-        update = telebot.types.Update.de_json(json_string)
-        bot.process_new_updates([update])
-        return '!', 200
-    else:
-        abort(403)
+@web_app.route('/')
+def home():
+    return "iKALABot is running!"
 
-# 3. หน้าบ้านสำหรับให้ Render เช็คสถานะ (Health Check)
-@app.route('/', methods=['GET', 'HEAD'])
-def index():
-    return "Bot is running perfectly on Render!", 200
+def run_server():
+    port = int(os.environ.get('PORT', 10000))
+    web_app.run(host='0.0.0.0', port=port)
 
-# 4. ฟังก์ชันจัดการเมื่อได้รับข้อความ
-@bot.message_handler(func=lambda message: True)
-def handle_message(message):
-    print(f"📩 ได้รับข้อความ: {message.text}")
+user_chats = {}
+
+def get_chat_session(user_id):
+    if user_id not in user_chats:
+        user_chats[user_id] = model.start_chat(history=[])
+    return user_chats[user_id]
+
+logging.basicConfig(format='%(asctime)s - %(name)s - %(levelname)s - %(message)s', level=logging.INFO)
+
+async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    await update.message.reply_text(
+        "สวัสดีครับ! ผมคือ iKALABot 🤖\nยินดีให้บริการครับ พิมพ์คุยกับผมได้เลย\n(พิมพ์ /clear เพื่อเริ่มคุยเรื่องใหม่)"
+    )
+
+async def clear_chat(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user_id = update.effective_user.id
+    if user_id in user_chats:
+        del user_chats[user_id]
+    await update.message.reply_text("ล้างประวัติการสนทนาเรียบร้อยแล้วครับ! 🧹")
+
+async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user_text = update.message.text
+    user_id = update.effective_user.id
     
-    if not GROQ_API or not client:
-        bot.reply_to(message, "❌ AI ไม่พร้อมใช้งานเนื่องจากไม่ได้ตั้งค่า GROQ_API_KEY")
-        return
-
+    await context.bot.send_chat_action(chat_id=update.effective_chat.id, action="typing")
+    
     try:
-        # แสดงสถานะ "กำลังพิมพ์..."
-        bot.send_chat_action(message.chat.id, 'typing')
-        
-        # ส่งข้อความไปให้ Groq AI (ใช้โมเดลใหม่ที่ใช้งานได้จริง)
-        chat_completion = client.chat.completions.create(
-            messages=[{"role": "user", "content": message.text}],
-            model="llama-3.1-8b-instant",  # อัปเดตเป็นโมเดลรุ่นใหม่แล้วเรียบร้อย!
-        )
-        
-        # ส่งคำตอบกลับไปหาผู้ใช้
-        reply_text = chat_completion.choices[0].message.content
-        bot.reply_to(message, reply_text)
-        print("📤 ตอบกลับด้วย AI สำเร็จ")
-        
+        chat_session = get_chat_session(user_id)
+        response = chat_session.send_message(user_text)
+        reply_text = response.text if response.text else "ขออภัย ไม่สามารถประมวลผลคำตอบได้"
+        await update.message.reply_text(reply_text)
     except Exception as e:
-        # พ่น Error จริงๆ ออกมาในแชทให้เห็นเลยว่า AI พังเพราะอะไร
-        print(f"❌ AI Error: {e}")
-        bot.reply_to(message, f"⚠️ AI เกิดข้อผิดพลาด:\n`{str(e)}`", parse_mode="Markdown")
+        logging.error(f"Error calling Gemini API: {e}")
+        await update.message.reply_text("เกิดข้อผิดพลาดในการเชื่อมต่อ กรุณาลองใหม่อีกครั้ง หรือพิมพ์ /clear เพื่อล้างความจำครับ")
 
 if __name__ == "__main__":
-    bot.remove_webhook()
-    bot.set_webhook(url=f"{APP_URL}/{TOKEN}")
-    
-    port = int(os.environ.get("PORT", 10000))
-    app.run(host="0.0.0.0", port=port)
+    if not TELEGRAM_TOKEN or not GEMINI_API_KEY:
+        print("ERROR: Missing TELEGRAM_BOT_TOKEN or GEMINI_API_KEY")
+    else:
+        t = threading.Thread(target=run_server)
+        t.daemon = True
+        t.start()
+        
+        app = ApplicationBuilder().token(TELEGRAM_TOKEN).build()
+        app.add_handler(CommandHandler("start", start))
+        app.add_handler(CommandHandler("clear", clear_chat))
+        app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
+        
+        print("iKALABot and Web Server running...")
+        app.run_polling()
