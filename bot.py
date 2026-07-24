@@ -5,16 +5,18 @@ from flask import Flask
 from dotenv import load_dotenv
 from telegram import Update
 from telegram.ext import ApplicationBuilder, CommandHandler, MessageHandler, filters, ContextTypes
-import google.generativeai as genai
+from google import genai
 
 load_dotenv()
 
 TELEGRAM_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
 
-if GEMINI_API_KEY:
-    genai.configure(api_key=GEMINI_API_KEY)
-model = genai.GenerativeModel("gemini-1.5-flash")
+# ตั้งค่า Logging และปิด Log ระดับ INFO ของ httpx เพื่อป้องกัน Token หลุด
+logging.basicConfig(format='%(asctime)s - %(name)s - %(levelname)s - %(message)s', level=logging.INFO)
+logging.getLogger("httpx").setLevel(logging.WARNING)
+
+client = genai.Client(api_key=GEMINI_API_KEY) if GEMINI_API_KEY else None
 
 web_app = Flask(__name__)
 
@@ -26,24 +28,15 @@ def run_server():
     port = int(os.environ.get('PORT', 10000))
     web_app.run(host='0.0.0.0', port=port)
 
-user_chats = {}
-
-def get_chat_session(user_id):
-    if user_id not in user_chats:
-        user_chats[user_id] = model.start_chat(history=[])
-    return user_chats[user_id]
-
-logging.basicConfig(format='%(asctime)s - %(name)s - %(levelname)s - %(message)s', level=logging.INFO)
+user_interaction_ids = {}
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text(
-        "สวัสดีครับ! ผมคือ iKALABot 🤖\nยินดีให้บริการครับ พิมพ์คุยกับผมได้เลย\n(พิมพ์ /clear เพื่อเริ่มคุยเรื่องใหม่)"
-    )
+    await update.message.reply_text("สวัสดีครับ! ผมคือ iKALABot 🤖\nยินดีให้บริการครับ พิมพ์คุยกับผมได้เลย\n(พิมพ์ /clear เพื่อเริ่มคุยเรื่องใหม่)")
 
 async def clear_chat(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
-    if user_id in user_chats:
-        del user_chats[user_id]
+    if user_id in user_interaction_ids:
+        del user_interaction_ids[user_id]
     await update.message.reply_text("ล้างประวัติการสนทนาเรียบร้อยแล้วครับ! 🧹")
 
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -53,13 +46,22 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await context.bot.send_chat_action(chat_id=update.effective_chat.id, action="typing")
     
     try:
-        chat_session = get_chat_session(user_id)
-        response = chat_session.send_message(user_text)
-        reply_text = response.text if response.text else "ขออภัย ไม่สามารถประมวลผลคำตอบได้"
+        prev_id = user_interaction_ids.get(user_id)
+        kwargs = {
+            "model": "gemini-3.6-flash",
+            "input": user_text
+        }
+        if prev_id:
+            kwargs["previous_interaction_id"] = prev_id
+
+        interaction = client.interactions.create(**kwargs)
+        user_interaction_ids[user_id] = interaction.id
+        
+        reply_text = interaction.output_text if interaction.output_text else "ขออภัย ไม่สามารถประมวลผลคำตอบได้"
         await update.message.reply_text(reply_text)
     except Exception as e:
         logging.error(f"Error calling Gemini API: {e}")
-        await update.message.reply_text("เกิดข้อผิดพลาดในการเชื่อมต่อ กรุณาลองใหม่อีกครั้ง หรือพิมพ์ /clear เพื่อล้างความจำครับ")
+        await update.message.reply_text("เกิดข้อผิดพลาดในการเชื่อมต่อ กรุณาลองใหม่อีกครั้ง หรือพิมพ์ /clear เพื่อเริ่มใหม่ครับ")
 
 if __name__ == "__main__":
     if not TELEGRAM_TOKEN or not GEMINI_API_KEY:
