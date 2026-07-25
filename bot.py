@@ -9,22 +9,19 @@ from dotenv import load_dotenv
 from telegram import Update
 from telegram.ext import ApplicationBuilder, CommandHandler, MessageHandler, filters, ContextTypes
 from google import genai
-from openrouter import OpenRouter
 from gtts import gTTS
 
 load_dotenv()
 
 TELEGRAM_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
-OPENROUTER_API_KEY = os.getenv("OPENROUTER_API_KEY") # รองรับตัวแปร OpenRouter API Key[span_0](start_span)[span_0](end_span)
+OPENROUTER_API_KEY = os.getenv("OPENROUTER_API_KEY")
 RENDER_EXTERNAL_URL = os.getenv("RENDER_EXTERNAL_URL")
 
 logging.basicConfig(format='%(asctime)s - %(name)s - %(levelname)s - %(message)s', level=logging.INFO)
 logging.getLogger("httpx").setLevel(logging.WARNING)
 
-# กำหนดค่า Client สำหรับ Gemini และ OpenRouter
 client = genai.Client(api_key=GEMINI_API_KEY) if GEMINI_API_KEY else None
-openrouter_client = OpenRouter(api_key=OPENROUTER_API_KEY) if OPENROUTER_API_KEY else None
 
 web_app = Flask(__name__)
 
@@ -85,7 +82,6 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     reply_audio_path = None
     
     try:
-        prev_id = user_interaction_ids.get(user_id)
         is_voice_message = False
 
         if update.message.voice:
@@ -95,47 +91,53 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await voice_file.download_to_drive(temp_file_path)
             
             uploaded_file = client.files.upload(file=temp_file_path)
-            input_data = [
-                {"type": "text", "text": "ถอดความและตอบกลับข้อความเสียงนี้เป็นภาษาไทย"},
-                {
-                    "type": "audio",
-                    "uri": uploaded_file.uri,
-                    "mime_type": uploaded_file.mime_type
-                }
-            ]
-
+            input_text = "ถอดความและตอบกลับข้อความเสียงนี้เป็นภาษาไทย"
+            # จัดการเคสเสียงผ่าน Gemini หลักตามเดิม
         elif update.message.photo:
             caption = update.message.caption or "อธิบายรูปภาพนี้ให้ฟังหน่อย"
-            photo_file = await update.message.photo[-1].get_file()
-            temp_file_path = f"photo_{user_id}.jpg"
-            await photo_file.download_to_drive(temp_file_path)
-            
-            uploaded_file = client.files.upload(file=temp_file_path)
-            input_data = [
-                {"type": "text", "text": caption},
-                {
-                    "type": "image",
-                    "uri": uploaded_file.uri,
-                    "mime_type": uploaded_file.mime_type
-                }
-            ]
+            input_text = caption
         else:
-            input_data = update.message.text
+            input_text = update.message.text
 
-        # ตัวอย่างการเลือกใช้งานโมเดล (สามารถเลือกใช้ Gemini หรือสลับมาใช้ OpenRouter ตามต้องการได้ที่นี่)
-        kwargs = {
-            "model": "gemini-3.6-flash",
-            "input": input_data
-        }
-        
-        if prev_id:
-            kwargs["previous_interaction_id"] = prev_id
+        # ตัวอย่างการเรียกใช้งาน OpenRouter (ถ้ามีการตั้งค่า API Key ไว้) หรือ fallback ไปใช้ Gemini
+        raw_reply = ""
+        if OPENROUTER_API_KEY:
+            try:
+                response = requests.post(
+                    url="[https://openrouter.ai/api/v1/chat/completions](https://openrouter.ai/api/v1/chat/completions)",
+                    headers={
+                        "Authorization": f"Bearer {OPENROUTER_API_KEY}",
+                        "HTTP-Referer": RENDER_EXTERNAL_URL if RENDER_EXTERNAL_URL else "[https://ikalabot.onrender.com](https://ikalabot.onrender.com)",
+                        "X-OpenRouter-Title": "iKALABot",
+                        "Content-Type": "application/json"
+                    },
+                    json={
+                        "model": "anthropic/claude-3.5-sonnet",
+                        "messages": [{"role": "user", "content": input_text}]
+                    },
+                    timeout=30
+                )
+                res_data = response.json()
+                if "choices" in res_data and len(res_data["choices"]) > 0:
+                    raw_reply = res_data["choices"][0]["message"]["content"]
+            except Exception as e:
+                logging.error(f"OpenRouter error: {e}")
 
-        interaction = client.interactions.create(**kwargs)
-        user_interaction_ids[user_id] = interaction.id
-        
-        raw_reply = interaction.output_text if interaction.output_text else "ขออภัย ไม่สามารถประมวลผลคำตอบได้"
-        reply_text = clean_text_for_telegram(raw_reply)
+        # ถ้าไม่ได้เปิดใช้งาน OpenRouter หรือเรียกไม่สำเร็จ ให้ใช้ Gemini เป็นระบบหลักตามเดิม
+        if not raw_reply and client:
+            kwargs = {
+                "model": "gemini-3.6-flash",
+                "input": input_text
+            }
+            prev_id = user_interaction_ids.get(user_id)
+            if prev_id:
+                kwargs["previous_interaction_id"] = prev_id
+
+            interaction = client.interactions.create(**kwargs)
+            user_interaction_ids[user_id] = interaction.id
+            raw_reply = interaction.output_text if interaction.output_text else "ขออภัย ไม่สามารถประมวลผลคำตอบได้"
+
+        reply_text = clean_text_for_telegram(raw_reply if raw_reply else "ขออภัย เกิดข้อผิดพลาดในการประมวลผล")
         
         await update.message.reply_text(reply_text)
 
