@@ -42,6 +42,17 @@ async def clear_chat(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if user_id in user_interaction_ids:
         del user_interaction_ids[user_id]
     await update.message.reply_text("ล้างประวัติการสนทนาเรียบร้อยแล้วครับ! 🧹")
+import re
+
+def clean_text_for_tts(text: str) -> str:
+    """
+    ลบเครื่องหมาย Markdown เช่น *, _, # ออกจากข้อความ เพื่อให้ gTTS อ่านออกเสียงได้ราบรื่น
+    """
+    text = re.sub(r'\*+', '', text)
+    text = re.sub(r'_+', '', text)
+    text = re.sub(r'#+', '', text)
+    text = re.sub(r'[-–—]{2,}', '', text)
+    return text.strip()
 
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
@@ -110,6 +121,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
         # หากผู้ใช้ส่งเสียงมา ให้สร้างเสียงตอบกลับส่งควบคู่ไปด้วย
         if is_voice_message:
+            clean_reply = clean_text_for_tts(reply_text)
             reply_audio_path = f"reply_{user_id}.mp3"
             tts = gTTS(text=reply_text, lang='th')
             tts.save(reply_audio_path)
