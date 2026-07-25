@@ -1,6 +1,8 @@
 import os
 import logging
 import threading
+import time
+import requests
 import re
 from flask import Flask
 from dotenv import load_dotenv
@@ -13,6 +15,7 @@ load_dotenv()
 
 TELEGRAM_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
+RENDER_EXTERNAL_URL = os.getenv("RENDER_EXTERNAL_URL") # ดึง URL อัตโนมัติจาก Render หรือใส่ URL ตรงๆ ได้
 
 logging.basicConfig(format='%(asctime)s - %(name)s - %(levelname)s - %(message)s', level=logging.INFO)
 logging.getLogger("httpx").setLevel(logging.WARNING)
@@ -23,11 +26,27 @@ web_app = Flask(__name__)
 
 @web_app.route('/')
 def home():
-    return "iKALABot Voice Edition is running!"
+    return "iKALABot Voice Edition is running and alive!"
 
 def run_server():
     port = int(os.environ.get('PORT', 10000))
     web_app.run(host='0.0.0.0', port=port)
+
+# ฟังก์ชันสะกิดตัวเองทุกๆ 5 นาที ป้องกันบอทหลับบน Render Free Tier
+def self_ping_service():
+    time.sleep(10) # รอให้เว็บเซิร์ฟเวอร์ตั้งไข่เสร็จสักครู่
+    # หากรันบน Render สามารถดึงชื่อโฮสต์ หรือกำหนด URL ตรงๆ ของคุณได้ที่นี่
+    target_url = RENDER_EXTERNAL_URL if RENDER_EXTERNAL_URL else "http://localhost:10000/"
+    
+    while True:
+        try:
+            response = requests.get(target_url)
+            logging.info(f"Self-Ping sent to {target_url} - Status: {response.status_code}")
+        except Exception as e:
+            logging.error(f"Self-Ping failed: {e}")
+        
+        # วนลูปทุกๆ 5 นาที (300 วินาที)
+        time.sleep(300)
 
 user_interaction_ids = {}
 
@@ -118,7 +137,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         
         raw_reply = interaction.output_text if interaction.output_text else "ขออภัย ไม่สามารถประมวลผลคำตอบได้"
         
-        # กรองดอกจันออกสำหรับข้อความทั่วไป (เก็บไว้เฉพาะในโค้ด)[span_1](start_span)[span_1](end_span)
+        # กรองดอกจันออกสำหรับข้อความทั่วไป (เก็บไว้เฉพาะในโค้ด)[span_0](start_span)[span_0](end_span)
         reply_text = clean_text_for_telegram(raw_reply)
         
         await update.message.reply_text(reply_text)
@@ -144,14 +163,21 @@ if __name__ == "__main__":
     if not TELEGRAM_TOKEN or not GEMINI_API_KEY:
         print("ERROR: Missing TELEGRAM_BOT_TOKEN or GEMINI_API_KEY")
     else:
-        t = threading.Thread(target=run_server)
-        t.daemon = True
-        t.start()
+        # รัน Flask Web Server ใน Thread ที่ 1
+        t_server = threading.Thread(target=run_server)
+        t_server.daemon = True
+        t_server.start()
         
+        # รันระบบ Self-Ping ใน Thread ที่ 2 เพื่อป้องกันบอทหลับ
+        t_ping = threading.Thread(target=self_ping_service)
+        t_ping.daemon = True
+        t_ping.start()
+        
+        # รัน Telegram Bot หลัก
         app = ApplicationBuilder().token(TELEGRAM_TOKEN).build()
         app.add_handler(CommandHandler("start", start))
         app.add_handler(CommandHandler("clear", clear_chat))
         app.add_handler(MessageHandler((filters.TEXT | filters.PHOTO | filters.VOICE) & ~filters.COMMAND, handle_message))
         
-        print("iKALABot Voice Edition is running...")
+        print("iKALABot Voice Edition with Self-Ping is running...")
         app.run_polling()
