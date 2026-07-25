@@ -1,5 +1,11 @@
+Flask
 python-telegram-bot>=20.0
 google-genai
 python-dotenv>=1.0.0
 Flask>=3.0.0
 gTTS>=2.5.0
+python-telegram-bot
+google-genai
+gTTS
+python-dotenv
+gunicorn
