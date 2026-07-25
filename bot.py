@@ -27,7 +27,7 @@ web_app = Flask(__name__)
 
 @web_app.route('/')
 def home():
-    return "iKALABot Voice Edition with OpenRouter is running!"
+    return "iKALABot Voice & Multi-Model Edition is running!"
 
 def run_server():
     port = int(os.environ.get('PORT', 10000))
@@ -44,13 +44,25 @@ def self_ping_service():
         time.sleep(300)
 
 def clean_text(text: str) -> str:
+    if "```" in text:
+        parts = text.split("```")
+        cleaned = []
+        for i, p in enumerate(parts):
+            if i % 2 == 0:
+                cleaned.append(re.sub(r'\*+', '', p))
+            else:
+                cleaned.append(p)
+        return "```".join(cleaned)
     return re.sub(r'\*+', '', text)
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text("Hello! iKALABot is ready. Send text, photo, or voice message.")
+    await update.message.reply_text(
+        "สวัสดีครับ! iKALABot พร้อมให้บริการแล้วครับ 🤖\n"
+        "คุณสามารถส่งข้อความ รูปภาพ หรือกดส่งข้อความเสียงมาคุยกับผมได้เลยครับ (บอทจะส่งเสียงตอบกลับให้ทุกข้อความครับ)"
+    )
 
 async def clear_chat(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text("Chat cleared!")
+    await update.message.reply_text("ล้างประวัติการสนทนาเรียบร้อยแล้วครับ! 🧹")
 
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
@@ -60,11 +72,9 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     reply_audio_path = None
     
     try:
-        is_voice = False
         input_text = ""
-
+        
         if update.message.voice:
-            is_voice = True
             file = await update.message.voice.get_file()
             temp_file_path = f"voice_{user_id}.ogg"
             await file.download_to_drive(temp_file_path)
@@ -74,16 +84,16 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 res = client.interactions.create(
                     model="gemini-3.6-flash",
                     input=[
-                        {"type": "text", "text": "Transcribe this audio to Thai text concisely."},
+                        {"type": "text", "text": "ถอดความข้อความเสียงนี้เป็นภาษาไทย"},
                         {"type": "audio", "uri": uploaded.uri, "mime_type": uploaded.mime_type}
                     ]
                 )
-                input_text = res.output_text if res.output_text else "Hello"
+                input_text = res.output_text if res.output_text else "สวัสดีครับ"
             else:
-                input_text = "Hello"
+                input_text = "สวัสดีครับ"
 
         elif update.message.photo:
-            caption = update.message.caption or "Describe this picture"
+            caption = update.message.caption or "ช่วยอธิบายรูปภาพนี้ให้ฟังหน่อยครับ"
             file = await update.message.photo[-1].get_file()
             temp_file_path = f"photo_{user_id}.jpg"
             await file.download_to_drive(temp_file_path)
@@ -107,10 +117,10 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         if OPENROUTER_API_KEY:
             try:
                 response = requests.post(
-                    url="https://openrouter.ai/api/v1/chat/completions",
+                    url="[https://openrouter.ai/api/v1/chat/completions](https://openrouter.ai/api/v1/chat/completions)",
                     headers={
                         "Authorization": f"Bearer {OPENROUTER_API_KEY}",
-                        "HTTP-Referer": RENDER_EXTERNAL_URL or "https://ikalabot.onrender.com",
+                        "HTTP-Referer": RENDER_EXTERNAL_URL or "[https://ikalabot.onrender.com](https://ikalabot.onrender.com)",
                         "X-OpenRouter-Title": "iKALABot",
                         "Content-Type": "application/json"
                     },
@@ -128,21 +138,23 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
         if not raw_reply and client:
             res = client.interactions.create(model="gemini-3.6-flash", input=input_text)
-            raw_reply = res.output_text if res.output_text else "Sorry, cannot process."
+            raw_reply = res.output_text if res.output_text else "ขออภัยครับ ไม่สามารถประมวลผลได้ในขณะนี้"
 
-        reply_text = clean_text(raw_reply or "Error processing request.")
+        reply_text = clean_text(raw_reply or "เกิดข้อผิดพลาดในการประมวลผล")
+        
+        # ส่งข้อความตัวหนังสือตอบกลับ
         await update.message.reply_text(reply_text)
 
-        if is_voice:
-            reply_audio_path = f"reply_{user_id}.mp3"
-            tts = gTTS(text=reply_text, lang='th')
-            tts.save(reply_audio_path)
-            with open(reply_audio_path, 'rb') as audio:
-                await update.message.reply_voice(voice=audio)
+        # ส่งไฟล์เสียง (Voice Note) ตามไปทุกครั้ง เพื่อให้กดฟังแทนการอ่านได้ทันที
+        reply_audio_path = f"reply_{user_id}.mp3"
+        tts = gTTS(text=reply_text, lang='th')
+        tts.save(reply_audio_path)
+        with open(reply_audio_path, 'rb') as audio:
+            await update.message.reply_voice(voice=audio)
 
     except Exception as e:
         logging.error(f"Error: {e}")
-        await update.message.reply_text("An error occurred. Please try again.")
+        await update.message.reply_text("เกิดข้อผิดพลาดในการประมวลผล กรุณาลองใหม่อีกครั้งครับ")
         
     finally:
         for path in [temp_file_path, reply_audio_path]:
