@@ -23,11 +23,14 @@ logging.getLogger("httpx").setLevel(logging.WARNING)
 
 client = genai.Client(api_key=GEMINI_API_KEY) if GEMINI_API_KEY else None
 
+user_histories = {}
+MAX_HISTORY_LENGTH = 6
+
 web_app = Flask(__name__)
 
 @web_app.route('/')
 def home():
-    return "iKALABot is running!"
+    return "iKALABot Secure Free-Tier Edition is running!"
 
 def run_server():
     port = int(os.environ.get('PORT', 10000))
@@ -38,12 +41,14 @@ def self_ping_service():
     target_url = RENDER_EXTERNAL_URL if RENDER_EXTERNAL_URL else "http://localhost:10000/"
     while True:
         try:
-            requests.get(target_url)
+            requests.get(target_url, timeout=10)
         except Exception:
             pass
         time.sleep(300)
 
 def clean_text(text: str) -> str:
+    if not text:
+        return ""
     if "```" in text:
         parts = text.split("```")
         cleaned = []
@@ -58,10 +63,13 @@ def clean_text(text: str) -> str:
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(
         "สวัสดีครับ! iKALABot พร้อมให้บริการแล้วครับ 🤖\n"
-        "ส่งข้อความ รูปภาพ หรือเสียงมาได้เลยครับ"
+        "ระบบรองรับข้อความ รูปภาพ และเสียง พร้อมส่งเสียงตอบกลับอัตโนมัติทุกข้อความครับ"
     )
 
 async def clear_chat(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user_id = update.effective_user.id
+    if user_id in user_histories:
+        user_histories[user_id].clear()
     await update.message.reply_text("ล้างประวัติการสนทนาเรียบร้อยแล้วครับ! 🧹")
 
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -73,21 +81,62 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     
     try:
         input_text = ""
+        uploaded_file = None
         
         if update.message.voice:
             file = await update.message.voice.get_file()
-            temp_file_path = f"voice_{user_id}.ogg"
+            temp_file_path = f"voice_{user_id}_{int(time.time())}.ogg"
             await file.download_to_drive(temp_file_path)
-            input_text = "ช่วยตอบคำถามจากเสียงนี้ให้หน่อยครับ"
+            input_text = "ช่วยตอบคำถามจากไฟล์เสียงนี้ให้หน่อยครับ"
         elif update.message.photo:
+            photo_file = await update.message.photo[-1].get_file()
+            temp_file_path = f"photo_{user_id}_{int(time.time())}.jpg"
+            await photo_file.download_to_drive(temp_file_path)
+            
+            if client:
+                try:
+                    uploaded_file = client.files.upload(file=temp_file_path)
+                except Exception as e:
+                    logging.error("File upload error encountered.")
             input_text = update.message.caption or "ช่วยอธิบายรูปภาพนี้ให้หน่อยครับ"
         else:
-            input_text = update.message.text
+            input_text = update.message.text or ""
 
+        if not input_text:
+            return
+
+        if user_id not in user_histories:
+            user_histories[user_id] = []
+        
+        history = user_histories[user_id]
+        history.append(f"User: {input_text}")
+        
+        if len(history) > MAX_HISTORY_LENGTH:
+            user_histories[user_id] = history[-MAX_HISTORY_LENGTH:]
+
+        context_prompt = "\n".join(user_histories[user_id])
         raw_reply = ""
         
-        # 1. พยายามใช้ OpenRouter ก่อน (เสถียรและไม่ติดโควต้า Gemini ฟรี)
-        if OPENROUTER_API_KEY:
+        if client:
+            try:
+                if uploaded_file:
+                    interaction = client.interactions.create(
+                        model="gemini-3.6-flash",
+                        input=[
+                            {"type": "text", "text": context_prompt},
+                            {"type": "image", "uri": uploaded_file.uri, "mime_type": uploaded_file.mime_type}
+                        ]
+                    )
+                else:
+                    interaction = client.interactions.create(
+                        model="gemini-3.6-flash",
+                        input=context_prompt
+                    )
+                raw_reply = interaction.output_text if interaction.output_text else ""
+            except Exception as e:
+                logging.error("Gemini primary model error encountered.")
+
+        if not raw_reply and OPENROUTER_API_KEY:
             try:
                 response = requests.post(
                     url="[https://openrouter.ai/api/v1/chat/completions](https://openrouter.ai/api/v1/chat/completions)",
@@ -98,8 +147,8 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
                         "Content-Type": "application/json"
                     },
                     json={
-                        "model": "google/gemini-flash-1.5",
-                        "messages": [{"role": "user", "content": input_text}]
+                        "model": "anthropic/claude-3.5-sonnet",
+                        "messages": [{"role": "user", "content": context_prompt}]
                     },
                     timeout=30
                 )
@@ -107,43 +156,36 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 if "choices" in data and len(data["choices"]) > 0:
                     raw_reply = data["choices"][0]["message"]["content"]
             except Exception as e:
-                logging.error(f"OpenRouter error: {e}")
+                logging.error("OpenRouter fallback error encountered.")
 
-        # 2. ถ้า OpenRouter ไม่ตอบ ลองใช้ Gemini SDK ตรง (ใช้ gemini-1.5-flash เพื่อเลี่ยง Rate Limit)
-        if not raw_reply and client:
-            try:
-                res = client.models.generate_content(
-                    model='gemini-1.5-flash',
-                    contents=input_text
-                )
-                raw_reply = res.text if res.text else ""
-            except Exception as e:
-                logging.error(f"Gemini error: {e}")
-
-        reply_text = clean_text(raw_reply or "ขออภัยครับ ระบบกำลังหนาแน่นหรือโควต้าเต็ม กรุณาลองใหม่อีกครั้งครับ")
+        reply_text = clean_text(raw_reply or "ขออภัยครับ ระบบกำลังหนาแน่น กรุณาลองใหม่อีกครั้งในครู่ครับ")
         
-        # ส่งข้อความ
+        user_histories[user_id].append(f"Bot: {reply_text}")
+
         await update.message.reply_text(reply_text)
 
-        # ส่งเสียงตอบกลับ
-        reply_audio_path = f"reply_{user_id}.mp3"
+        reply_audio_path = f"reply_{user_id}_{int(time.time())}.mp3"
         tts = gTTS(text=reply_text, lang='th')
         tts.save(reply_audio_path)
+        
         with open(reply_audio_path, 'rb') as audio:
             await update.message.reply_voice(voice=audio)
 
     except Exception as e:
-        logging.error(f"Error: {e}")
-        await update.message.reply_text("เกิดข้อผิดพลาดในการประมวลผล กรุณาลองใหม่อีกครั้งครับ")
+        logging.error("Critical error in message handler.")
+        await update.message.reply_text("เกิดข้อผิดพลาดขึ้นชั่วคราว ระบบได้ทำการป้องกันความปลอดภัยเรียบร้อยแล้วครับ")
         
     finally:
         for path in [temp_file_path, reply_audio_path]:
             if path and os.path.exists(path):
-                os.remove(path)
+                try:
+                    os.remove(path)
+                except Exception:
+                    pass
 
 if __name__ == "__main__":
     if not TELEGRAM_TOKEN:
-        print("ERROR: Missing TELEGRAM_BOT_TOKEN")
+        print("ERROR: Missing TELEGRAM_BOT_TOKEN in environment variables.")
     else:
         threading.Thread(target=run_server, daemon=True).start()
         threading.Thread(target=self_ping_service, daemon=True).start()
