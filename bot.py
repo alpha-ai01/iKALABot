@@ -1,6 +1,7 @@
 import os
 import logging
 import threading
+import re
 from flask import Flask
 from dotenv import load_dotenv
 from telegram import Update
@@ -30,6 +31,22 @@ def run_server():
 
 user_interaction_ids = {}
 
+def clean_text_for_telegram(text: str) -> str:
+    """
+    ลบเครื่องหมาย * ออกจากข้อความทั่วไป แต่เว้นไว้หากอยู่ในบล็อกโค้ด (```)
+    """
+    if "```" in text:
+        parts = text.split("```")
+        cleaned_parts = []
+        for i, part in enumerate(parts):
+            if i % 2 == 0:
+                cleaned_parts.append(re.sub(r'\*+', '', part))
+            else:
+                cleaned_parts.append(part)
+        return "```".join(cleaned_parts)
+    else:
+        return re.sub(r'\*+', '', text)
+
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(
         "สวัสดีครับ! ผมคือ iKALABot (รองรับการสนทนาด้วยเสียง 🎙️) 🤖\n"
@@ -42,17 +59,6 @@ async def clear_chat(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if user_id in user_interaction_ids:
         del user_interaction_ids[user_id]
     await update.message.reply_text("ล้างประวัติการสนทนาเรียบร้อยแล้วครับ! 🧹")
-import re
-
-def clean_text_for_tts(text: str) -> str:
-    """
-    ลบเครื่องหมาย Markdown เช่น *, _, # ออกจากข้อความ เพื่อให้ gTTS อ่านออกเสียงได้ราบรื่น
-    """
-    text = re.sub(r'\*+', '', text)
-    text = re.sub(r'_+', '', text)
-    text = re.sub(r'#+', '', text)
-    text = re.sub(r'[-–—]{2,}', '', text)
-    return text.strip()
 
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
@@ -65,7 +71,6 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         prev_id = user_interaction_ids.get(user_id)
         is_voice_message = False
 
-        # 1. กรณีผู้ใช้ส่ง "ข้อความเสียง"
         if update.message.voice:
             is_voice_message = True
             voice_file = await update.message.voice.get_file()
@@ -82,7 +87,6 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 }
             ]
 
-        # 2. กรณีผู้ใช้ส่ง "รูปภาพ"
         elif update.message.photo:
             caption = update.message.caption or "อธิบายรูปภาพนี้ให้ฟังหน่อย"
             photo_file = await update.message.photo[-1].get_file()
@@ -98,8 +102,6 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     "mime_type": uploaded_file.mime_type
                 }
             ]
-
-        # 3. กรณีผู้ใช้ส่ง "ข้อความ" ปกติ
         else:
             input_data = update.message.text
 
@@ -114,14 +116,14 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         interaction = client.interactions.create(**kwargs)
         user_interaction_ids[user_id] = interaction.id
         
-        reply_text = interaction.output_text if interaction.output_text else "ขออภัย ไม่สามารถประมวลผลคำตอบได้"
+        raw_reply = interaction.output_text if interaction.output_text else "ขออภัย ไม่สามารถประมวลผลคำตอบได้"
         
-        # ส่งข้อความตัวอักษรกลับไป
+        # กรองดอกจันออกสำหรับข้อความทั่วไป (เก็บไว้เฉพาะในโค้ด)[span_1](start_span)[span_1](end_span)
+        reply_text = clean_text_for_telegram(raw_reply)
+        
         await update.message.reply_text(reply_text)
 
-        # หากผู้ใช้ส่งเสียงมา ให้สร้างเสียงตอบกลับส่งควบคู่ไปด้วย
         if is_voice_message:
-            clean_reply = clean_text_for_tts(reply_text)
             reply_audio_path = f"reply_{user_id}.mp3"
             tts = gTTS(text=reply_text, lang='th')
             tts.save(reply_audio_path)
@@ -134,7 +136,6 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text("เกิดข้อผิดพลาดในการประมวลผล กรุณาลองใหม่อีกครั้งครับ")
         
     finally:
-        # ลบไฟล์ชั่วคราวทิ้งทั้งหมด
         for path in [temp_file_path, reply_audio_path]:
             if path and os.path.exists(path):
                 os.remove(path)
@@ -150,7 +151,6 @@ if __name__ == "__main__":
         app = ApplicationBuilder().token(TELEGRAM_TOKEN).build()
         app.add_handler(CommandHandler("start", start))
         app.add_handler(CommandHandler("clear", clear_chat))
-        # ดักจับทั้งข้อความ รูปภาพ และข้อความเสียง
         app.add_handler(MessageHandler((filters.TEXT | filters.PHOTO | filters.VOICE) & ~filters.COMMAND, handle_message))
         
         print("iKALABot Voice Edition is running...")
