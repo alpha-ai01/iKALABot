@@ -27,7 +27,7 @@ web_app = Flask(__name__)
 
 @web_app.route('/')
 def home():
-    return "iKALABot Voice & Multi-Model Edition is running!"
+    return "iKALABot is running!"
 
 def run_server():
     port = int(os.environ.get('PORT', 10000))
@@ -58,7 +58,7 @@ def clean_text(text: str) -> str:
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(
         "สวัสดีครับ! iKALABot พร้อมให้บริการแล้วครับ 🤖\n"
-        "คุณสามารถส่งข้อความ รูปภาพ หรือกดส่งข้อความเสียงมาคุยกับผมได้เลยครับ (บอทจะส่งเสียงตอบกลับให้ทุกข้อความครับ)"
+        "ส่งข้อความ รูปภาพ หรือเสียงมาได้เลยครับ"
     )
 
 async def clear_chat(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -78,42 +78,15 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
             file = await update.message.voice.get_file()
             temp_file_path = f"voice_{user_id}.ogg"
             await file.download_to_drive(temp_file_path)
-            
-            if client:
-                uploaded = client.files.upload(file=temp_file_path)
-                res = client.interactions.create(
-                    model="gemini-3.6-flash",
-                    input=[
-                        {"type": "text", "text": "ถอดความข้อความเสียงนี้เป็นภาษาไทย"},
-                        {"type": "audio", "uri": uploaded.uri, "mime_type": uploaded.mime_type}
-                    ]
-                )
-                input_text = res.output_text if res.output_text else "สวัสดีครับ"
-            else:
-                input_text = "สวัสดีครับ"
-
+            input_text = "ช่วยตอบคำถามจากเสียงนี้ให้หน่อยครับ"
         elif update.message.photo:
-            caption = update.message.caption or "ช่วยอธิบายรูปภาพนี้ให้ฟังหน่อยครับ"
-            file = await update.message.photo[-1].get_file()
-            temp_file_path = f"photo_{user_id}.jpg"
-            await file.download_to_drive(temp_file_path)
-            
-            if client:
-                uploaded = client.files.upload(file=temp_file_path)
-                res = client.interactions.create(
-                    model="gemini-3.6-flash",
-                    input=[
-                        {"type": "text", "text": caption},
-                        {"type": "image", "uri": uploaded.uri, "mime_type": uploaded.mime_type}
-                    ]
-                )
-                input_text = res.output_text if res.output_text else caption
-            else:
-                input_text = caption
+            input_text = update.message.caption or "ช่วยอธิบายรูปภาพนี้ให้หน่อยครับ"
         else:
             input_text = update.message.text
 
         raw_reply = ""
+        
+        # 1. พยายามใช้ OpenRouter ก่อน (เสถียรและไม่ติดโควต้า Gemini ฟรี)
         if OPENROUTER_API_KEY:
             try:
                 response = requests.post(
@@ -125,7 +98,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
                         "Content-Type": "application/json"
                     },
                     json={
-                        "model": "anthropic/claude-3.5-sonnet",
+                        "model": "google/gemini-flash-1.5",
                         "messages": [{"role": "user", "content": input_text}]
                     },
                     timeout=30
@@ -136,16 +109,23 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
             except Exception as e:
                 logging.error(f"OpenRouter error: {e}")
 
+        # 2. ถ้า OpenRouter ไม่ตอบ ลองใช้ Gemini SDK ตรง (ใช้ gemini-1.5-flash เพื่อเลี่ยง Rate Limit)
         if not raw_reply and client:
-            res = client.interactions.create(model="gemini-3.6-flash", input=input_text)
-            raw_reply = res.output_text if res.output_text else "ขออภัยครับ ไม่สามารถประมวลผลได้ในขณะนี้"
+            try:
+                res = client.models.generate_content(
+                    model='gemini-1.5-flash',
+                    contents=input_text
+                )
+                raw_reply = res.text if res.text else ""
+            except Exception as e:
+                logging.error(f"Gemini error: {e}")
 
-        reply_text = clean_text(raw_reply or "เกิดข้อผิดพลาดในการประมวลผล")
+        reply_text = clean_text(raw_reply or "ขออภัยครับ ระบบกำลังหนาแน่นหรือโควต้าเต็ม กรุณาลองใหม่อีกครั้งครับ")
         
-        # ส่งข้อความตัวหนังสือตอบกลับ
+        # ส่งข้อความ
         await update.message.reply_text(reply_text)
 
-        # ส่งไฟล์เสียง (Voice Note) ตามไปทุกครั้ง เพื่อให้กดฟังแทนการอ่านได้ทันที
+        # ส่งเสียงตอบกลับ
         reply_audio_path = f"reply_{user_id}.mp3"
         tts = gTTS(text=reply_text, lang='th')
         tts.save(reply_audio_path)
@@ -162,8 +142,8 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 os.remove(path)
 
 if __name__ == "__main__":
-    if not TELEGRAM_TOKEN or not GEMINI_API_KEY:
-        print("ERROR: Missing tokens")
+    if not TELEGRAM_TOKEN:
+        print("ERROR: Missing TELEGRAM_BOT_TOKEN")
     else:
         threading.Thread(target=run_server, daemon=True).start()
         threading.Thread(target=self_ping_service, daemon=True).start()
