@@ -75,7 +75,6 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await file.download_to_drive(temp_file_path)
             
             # --- เพิ่มส่วนนี้เพื่ออัปโหลดไฟล์เสียงไปที่ Gemini ---
-            if client:
                 try:
                     uploaded_file = client.files.upload(file=temp_file_path)
                 except Exception as e:
