@@ -1,9 +1,9 @@
 Flask
 google-genai
+python-telegram-bot[webhooks]==20.x
 python-dotenv>=1.0.0
 Flask>=3.0.0
 gTTS>=2.5.0
-python-telegram-bot[webhooks]==20.x
 google-genai
 gTTS
 python-dotenv
