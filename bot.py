@@ -67,13 +67,15 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     reply_audio_path = None
     uploaded_file = None
     
-        client.files.upload
-           # 1. จัดการไฟล์เสียง
-        if update.message.voice:
-            file = await update.message.voice.get_file()
-            temp_file_path = f"voice_{user_id}_{int(time.time())}.ogg"
-            await file.download_to_drive(temp_file_path)
-            
+        
+       # 1. จัดการไฟล์เสียง
+            # สังเกตการเว้นวรรคให้ตรงกันในแต่ละระดับ
+            if client:
+                try:
+                    uploaded_file = client.files.upload(file=temp_file_path)
+                except Exception as e:
+                    logging.error(f"Voice upload error: {e}")
+
             # --- เพิ่มส่วนนี้เพื่ออัปโหลดไฟล์เสียงไปที่ Gemini ---
                 try:
                     uploaded_file = client.files.upload(file=temp_file_path)
