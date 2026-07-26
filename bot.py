@@ -11,6 +11,7 @@ from telegram.ext import ApplicationBuilder, CommandHandler, MessageHandler, fil
 from google import genai
 from gtts import gTTS
 
+# โหลดตัวแปรสภาพแวดล้อมจากไฟล์ .env
 load_dotenv()
 
 TELEGRAM_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
@@ -18,9 +19,11 @@ GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
 OPENROUTER_API_KEY = os.getenv("OPENROUTER_API_KEY")
 RENDER_EXTERNAL_URL = os.getenv("RENDER_EXTERNAL_URL")
 
+# ตั้งค่า Logging
 logging.basicConfig(format='%(asctime)s - %(name)s - %(levelname)s - %(message)s', level=logging.INFO)
 logging.getLogger("httpx").setLevel(logging.WARNING)
 
+# กำหนดค่า Client สำหรับ Gemini API
 client = genai.Client(api_key=GEMINI_API_KEY) if GEMINI_API_KEY else None
 
 user_histories = {}
@@ -78,16 +81,19 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     
     temp_file_path = None
     reply_audio_path = None
+    uploaded_file = None
     
     try:
         input_text = ""
-        uploaded_file = None
         
+        # 1. จัดการไฟล์เสียง
         if update.message.voice:
             file = await update.message.voice.get_file()
             temp_file_path = f"voice_{user_id}_{int(time.time())}.ogg"
             await file.download_to_drive(temp_file_path)
             input_text = "ช่วยตอบคำถามจากไฟล์เสียงนี้ให้หน่อยครับ"
+            
+        # 2. จัดการไฟล์รูปภาพ
         elif update.message.photo:
             photo_file = await update.message.photo[-1].get_file()
             temp_file_path = f"photo_{user_id}_{int(time.time())}.jpg"
@@ -97,14 +103,17 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 try:
                     uploaded_file = client.files.upload(file=temp_file_path)
                 except Exception as e:
-                    logging.error("File upload error encountered.")
+                    logging.error(f"File upload error encountered: {e}")
             input_text = update.message.caption or "ช่วยอธิบายรูปภาพนี้ให้หน่อยครับ"
+            
+        # 3. จัดการข้อความ
         else:
             input_text = update.message.text or ""
 
         if not input_text:
             return
 
+        # บันทึกประวัติการสนทนา
         if user_id not in user_histories:
             user_histories[user_id] = []
         
@@ -117,25 +126,25 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         context_prompt = "\n".join(user_histories[user_id])
         raw_reply = ""
         
+        # ประมวลผลด้วย Gemini API
         if client:
             try:
                 if uploaded_file:
-                    interaction = client.interactions.create(
+                    response = client.models.generate_content(
                         model="gemini-3.6-flash",
-                        input=[
-                            {"type": "text", "text": context_prompt},
-                            {"type": "image", "uri": uploaded_file.uri, "mime_type": uploaded_file.mime_type}
-                        ]
+                        contents=[uploaded_file, context_prompt]
                     )
+                    raw_reply = response.text if response.text else ""
                 else:
                     interaction = client.interactions.create(
                         model="gemini-3.6-flash",
                         input=context_prompt
                     )
-                raw_reply = interaction.output_text if interaction.output_text else ""
+                    raw_reply = interaction.output_text if interaction.output_text else ""
             except Exception as e:
-                logging.error("Gemini primary model error encountered.")
+                logging.error(f"Gemini primary model error encountered: {e}")
 
+        # ระบบ Fallback ไปยัง OpenRouter
         if not raw_reply and OPENROUTER_API_KEY:
             try:
                 response = requests.post(
@@ -156,14 +165,15 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 if "choices" in data and len(data["choices"]) > 0:
                     raw_reply = data["choices"][0]["message"]["content"]
             except Exception as e:
-                logging.error("OpenRouter fallback error encountered.")
+                logging.error(f"OpenRouter fallback error encountered: {e}")
 
         reply_text = clean_text(raw_reply or "ขออภัยครับ ระบบกำลังหนาแน่น กรุณาลองใหม่อีกครั้งในครู่ครับ")
-        
         user_histories[user_id].append(f"Bot: {reply_text}")
 
+        # ส่งข้อความตอบกลับ
         await update.message.reply_text(reply_text)
 
+        # สร้างเสียง TTS และส่งกลับ
         reply_audio_path = f"reply_{user_id}_{int(time.time())}.mp3"
         tts = gTTS(text=reply_text, lang='th')
         tts.save(reply_audio_path)
@@ -172,7 +182,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await update.message.reply_voice(voice=audio)
 
     except Exception as e:
-        logging.error("Critical error in message handler.")
+        logging.error(f"Critical error in message handler: {e}")
         await update.message.reply_text("เกิดข้อผิดพลาดขึ้นชั่วคราว ระบบได้ทำการป้องกันความปลอดภัยเรียบร้อยแล้วครับ")
         
     finally:
@@ -182,10 +192,16 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     os.remove(path)
                 except Exception:
                     pass
+        
+        if uploaded_file and client:
+            try:
+                client.files.delete(name=uploaded_file.name)
+            except Exception as e:
+                logging.error(f"Failed to delete file from Gemini: {e}")
 
 if __name__ == "__main__":
     if not TELEGRAM_TOKEN:
-        print("ERROR: Missing TELEGRAM_BOT_TOKEN in environment variables.")
+        print("ERROR: Missing TELEGRAM_TOKEN in environment variables.")
     else:
         threading.Thread(target=run_server, daemon=True).start()
         threading.Thread(target=self_ping_service, daemon=True).start()
