@@ -1,6 +1,6 @@
 Flask
 google-genai
-python-telegram-bot==1.2.x
+python-telegram-bot
 python-telegram-bot[webhooks]==22.8
 python-dotenv>=1.0.0
 Flask>=3.0.0
