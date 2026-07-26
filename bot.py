@@ -7,6 +7,7 @@ from telegram import Update
 from telegram.ext import ApplicationBuilder, CommandHandler, MessageHandler, filters, ContextTypes
 from google import genai
 from gtts import gTTS
+token = os.environ.get("TELEGRAM_TOKEN")
 
 # โหลดตัวแปรสภาพแวดล้อมจากไฟล์ .env
 load_dotenv()
