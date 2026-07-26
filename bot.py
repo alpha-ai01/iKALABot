@@ -23,7 +23,7 @@ RENDER_EXTERNAL_URL = os.getenv("RENDER_EXTERNAL_URL")
 logging.basicConfig(format='%(asctime)s - %(name)s - %(levelname)s - %(message)s', level=logging.INFO)
 logging.getLogger("httpx").setLevel(logging.WARNING)
 
-# กำหนดค่า Client สำหรับ Gemini API
+# กำหนดค่า Client สำหรับ Gemini API ตามมาตรฐาน Google GenAI SDK
 client = genai.Client(api_key=GEMINI_API_KEY) if GEMINI_API_KEY else None
 
 user_histories = {}
@@ -126,15 +126,22 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         context_prompt = "\n".join(user_histories[user_id])
         raw_reply = ""
         
-        # ประมวลผลด้วย Gemini API
+        # ประมวลผลด้วย Gemini API ผ่าน Interactions API
         if client:
             try:
                 if uploaded_file:
-                    response = client.models.generate_content(
+                    interaction = client.interactions.create(
                         model="gemini-3.6-flash",
-                        contents=[uploaded_file, context_prompt]
+                        input=[
+                            {"type": "text", "text": context_prompt},
+                            {
+                                "type": "image",
+                                "uri": uploaded_file.uri,
+                                "mime_type": uploaded_file.mime_type
+                            }
+                        ]
                     )
-                    raw_reply = response.text if response.text else ""
+                    raw_reply = interaction.output_text if interaction.output_text else ""
                 else:
                     interaction = client.interactions.create(
                         model="gemini-3.6-flash",
@@ -144,7 +151,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
             except Exception as e:
                 logging.error(f"Gemini primary model error encountered: {e}")
 
-        # ระบบ Fallback ไปยัง OpenRouter
+        # ระบบ Fallback ไปยัง OpenRouter API ตามมาตรฐานสากล[span_2](start_span)[span_2](end_span)
         if not raw_reply and OPENROUTER_API_KEY:
             try:
                 response = requests.post(
