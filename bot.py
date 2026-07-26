@@ -68,9 +68,22 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     uploaded_file = None
     
     try:
-        input_text = ""
-        
-        # 1. จัดการไฟล์เสียง
+        client.files.upload
+            # 1. จัดการไฟล์เสียง
+        if update.message.voice:
+            file = await update.message.voice.get_file()
+            temp_file_path = f"voice_{user_id}_{int(time.time())}.ogg"
+            await file.download_to_drive(temp_file_path)
+            
+            # --- เพิ่มส่วนนี้เพื่ออัปโหลดไฟล์เสียงไปที่ Gemini ---
+            if client:
+                try:
+                    uploaded_file = client.files.upload(file=temp_file_path)
+                except Exception as e:
+                    logging.error(f"Voice upload error: {e}")
+            # -----------------------------------------------
+            
+            input_text = "โปรดฟังไฟล์เสียงนี้และช่วยตอบคำถามหรือสรุปให้หน่อยครับ"
         if update.message.voice:
             file = await update.message.voice.get_file()
             temp_file_path = f"voice_{user_id}_{int(time.time())}.ogg"
@@ -114,26 +127,21 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         if client:
             try:
                 if uploaded_file:
+                    # เช็กว่าเป็นรูปภาพหรือไฟล์เสียง
+                    file_type = "image" if "image" in uploaded_file.mime_type else "audio"
+                    
                     interaction = client.interactions.create(
                         model="gemini-3.6-flash",
                         input=[
                             {"type": "text", "text": context_prompt},
                             {
-                                "type": "image",
+                                "type": file_type,  # เปลี่ยนจากคำว่า "image" มาใช้ตัวแปร file_type
                                 "uri": uploaded_file.uri,
                                 "mime_type": uploaded_file.mime_type
                             }
                         ]
                     )
                     raw_reply = interaction.output_text if interaction.output_text else ""
-                else:
-                    interaction = client.interactions.create(
-                        model="gemini-3.6-flash",
-                        input=context_prompt
-                    )
-                    raw_reply = interaction.output_text if interaction.output_text else ""
-            except Exception as e:
-                logging.error(f"Gemini primary model error encountered: {e}")
 
         # ระบบ Fallback ไปยัง OpenRouter API ตามมาตรฐานสากล[span_2](start_span)[span_2](end_span)
         if not raw_reply and OPENROUTER_API_KEY:
