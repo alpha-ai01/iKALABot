@@ -67,7 +67,8 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     reply_audio_path = None
     uploaded_file = None
     
-    try: client.files.upload
+    try: 
+        client.files.upload
            # 1. จัดการไฟล์เสียง
         if update.message.voice:
             file = await update.message.voice.get_file()
