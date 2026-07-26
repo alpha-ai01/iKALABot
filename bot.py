@@ -1,10 +1,7 @@
 import os
 import logging
-import threading
 import time
-import requests
 import re
-from flask import Flask
 from dotenv import load_dotenv
 from telegram import Update
 from telegram.ext import ApplicationBuilder, CommandHandler, MessageHandler, filters, ContextTypes
@@ -29,27 +26,12 @@ client = genai.Client(api_key=GEMINI_API_KEY) if GEMINI_API_KEY else None
 user_histories = {}
 MAX_HISTORY_LENGTH = 6
 
-# ลบส่วนนี้ออกทั้งหมด
-web_app = Flask(__name__)
+# ลบ Flask และ self_ping_service ออกไปหมดแล้ว ตรงนี้จะต่อด้วย clean_text ทันที
+def clean_text(text: str) -> str:
+    if not text:
+        return ""
+    # ... (โค้ดส่วนที่เหลือของคุณ) ...
 
-@web_app.route('/')
-def home():
-    return "iKALABot Secure Free-Tier Edition is running!"
-
-def run_server():
-    #...
-def self_ping_service():
-    #...
-
-def self_ping_service():
-    time.sleep(10)
-    target_url = RENDER_EXTERNAL_URL if RENDER_EXTERNAL_URL else "http://localhost:10000/"
-    while True:
-        try:
-            requests.get(target_url, timeout=10)
-        except Exception:
-            pass
-        time.sleep(300)
 
 def clean_text(text: str) -> str:
     if not text:
