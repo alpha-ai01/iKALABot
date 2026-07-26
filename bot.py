@@ -67,9 +67,8 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     reply_audio_path = None
     uploaded_file = None
     
-    try:
-        client.files.upload
-            # 1. จัดการไฟล์เสียง
+    try: client.files.upload
+           # 1. จัดการไฟล์เสียง
         if update.message.voice:
             file = await update.message.voice.get_file()
             temp_file_path = f"voice_{user_id}_{int(time.time())}.ogg"
@@ -84,11 +83,6 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
             # -----------------------------------------------
             
             input_text = "โปรดฟังไฟล์เสียงนี้และช่วยตอบคำถามหรือสรุปให้หน่อยครับ"
-        if update.message.voice:
-            file = await update.message.voice.get_file()
-            temp_file_path = f"voice_{user_id}_{int(time.time())}.ogg"
-            await file.download_to_drive(temp_file_path)
-            input_text = "ช่วยตอบคำถามจากไฟล์เสียงนี้ให้หน่อยครับ"
             
         # 2. จัดการไฟล์รูปภาพ
         elif update.message.photo:
