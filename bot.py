@@ -29,6 +29,7 @@ client = genai.Client(api_key=GEMINI_API_KEY) if GEMINI_API_KEY else None
 user_histories = {}
 MAX_HISTORY_LENGTH = 6
 
+# ลบส่วนนี้ออกทั้งหมด
 web_app = Flask(__name__)
 
 @web_app.route('/')
@@ -36,8 +37,9 @@ def home():
     return "iKALABot Secure Free-Tier Edition is running!"
 
 def run_server():
-    port = int(os.environ.get('PORT', 10000))
-    web_app.run(host='0.0.0.0', port=port)
+    #...
+def self_ping_service():
+    #...
 
 def self_ping_service():
     time.sleep(10)
@@ -210,12 +212,27 @@ if __name__ == "__main__":
     if not TELEGRAM_TOKEN:
         print("ERROR: Missing TELEGRAM_TOKEN in environment variables.")
     else:
-        threading.Thread(target=run_server, daemon=True).start()
-        threading.Thread(target=self_ping_service, daemon=True).start()
-        
         app = ApplicationBuilder().token(TELEGRAM_TOKEN).build()
         app.add_handler(CommandHandler("start", start))
         app.add_handler(CommandHandler("clear", clear_chat))
         app.add_handler(MessageHandler((filters.TEXT | filters.PHOTO | filters.VOICE) & ~filters.COMMAND, handle_message))
         
-        app.run_polling()
+        # ตรวจสอบว่ารันบน Render หรือ Local
+        if RENDER_EXTERNAL_URL:
+            # === รันโหมด Webhook (สำหรับบน Render) ===
+            PORT = int(os.environ.get('PORT', 10000))
+            URL_PATH = TELEGRAM_TOKEN # ใช้ Token เป็น Path เพื่อความปลอดภัย
+            WEBHOOK_URL = f"{RENDER_EXTERNAL_URL.rstrip('/')}/{URL_PATH}"
+            
+            print(f"Starting Webhook on {WEBHOOK_URL} (Port: {PORT})")
+            app.run_webhook(
+                listen="0.0.0.0",
+                port=PORT,
+                url_path=URL_PATH,
+                webhook_url=WEBHOOK_URL
+            )
+        else:
+            # === รันโหมด Polling (สำหรับการทดสอบในคอมพิวเตอร์ตัวเอง) ===
+            print("Starting Long Polling (Local Mode)...")
+            app.run_polling()
+        
