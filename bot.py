@@ -11,7 +11,7 @@ from gtts import gTTS
 # โหลดตัวแปรสภาพแวดล้อมจากไฟล์ .env
 load_dotenv()
 
-token = os.environ.get("TELEGRAM_BOT_TOKEN")
+TELEGRAM_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
 OPENROUTER_API_KEY = os.getenv("OPENROUTER_API_KEY")
 RENDER_EXTERNAL_URL = os.getenv("RENDER_EXTERNAL_URL")
