@@ -1,223 +1,150 @@
 import os
-import logging
-import time
+import telebot
+import requests
+import base64
 import re
-from dotenv import load_dotenv
-from telegram import Update
-from telegram.ext import ApplicationBuilder, CommandHandler, MessageHandler, filters, ContextTypes
-from google import genai
+import time
+from flask import Flask
+from threading import Thread
 from gtts import gTTS
 
-# โหลดตัวแปรสภาพแวดล้อมจากไฟล์ .env
-load_dotenv()
+app = Flask('')
+@app.route('/')
+def home():
+    return "Bot is running on Singapore!"
 
-TELEGRAM_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
-GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
-OPENROUTER_API_KEY = os.getenv("OPENROUTER_API_KEY")
-RENDER_EXTERNAL_URL = os.getenv("RENDER_EXTERNAL_URL")
+def run():
+    app.run(host='0.0.0.0', port=int(os.environ.get('PORT', 8080)))
 
-# ตั้งค่า Logging
-logging.basicConfig(format='%(asctime)s - %(name)s - %(levelname)s - %(message)s', level=logging.INFO)
-logging.getLogger("httpx").setLevel(logging.WARNING)
+def keep_alive():
+    t = Thread(target=run)
+    t.start()
 
-# กำหนดค่า Client สำหรับ Gemini API ตามมาตรฐาน Google GenAI SDK
-client = genai.Client(api_key=GEMINI_API_KEY) if GEMINI_API_KEY else None
+keep_alive()
 
-user_histories = {}
-MAX_HISTORY_LENGTH = 6
+TOKEN = os.environ.get('TELEGRAM_TOKEN')
+API_KEY = os.environ.get('OPENROUTER_API_KEY')
 
-# ลบ Flask และ self_ping_service ออกไปหมดแล้ว ตรงนี้จะต่อด้วย clean_text ทันที
-def clean_text(text: str) -> str:
-    if not text:
-        return ""
-    # ... (โค้ดส่วนที่เหลือของคุณ) ...
+bot = telebot.TeleBot(TOKEN)
 
-
-def clean_text(text: str) -> str:
-    if not text:
-        return ""
-    if "```" in text:
-        parts = text.split("```")
-        cleaned = []
-        for i, p in enumerate(parts):
-            if i % 2 == 0:
-                cleaned.append(re.sub(r'\*+', '', p))
-            else:
-                cleaned.append(p)
-        return "```".join(cleaned)
-    return re.sub(r'\*+', '', text)
-
-async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text(
-        "สวัสดีครับ! iKALABot พร้อมให้บริการแล้วครับ 🤖\n"
-        "ระบบรองรับข้อความ รูปภาพ และเสียง พร้อมส่งเสียงตอบกลับอัตโนมัติทุกข้อความครับ"
-    )
-
-async def clear_chat(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    user_id = update.effective_user.id
-    if user_id in user_histories:
-        user_histories[user_id].clear()
-    await update.message.reply_text("ล้างประวัติการสนทนาเรียบร้อยแล้วครับ! 🧹")
-
-async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    user_id = update.effective_user.id
-    await context.bot.send_chat_action(chat_id=update.effective_chat.id, action="record_voice")
+# ฟังก์ชันดึงเนื้อหาจาก URL หรือสคริปต์เชิงลึก
+def extract_url_content(text: str) -> str:
+    urls = re.findall(r'https?://[^\s]+', text)
+    if not urls:
+        return text
     
-    temp_file_path = None
-    reply_audio_path = None
-    uploaded_file = None
-    
-        
-       # 1. จัดการไฟล์เสียง
-            # สังเกตการเว้นวรรคให้ตรงกันในแต่ละระดับ
-            if client:
-                try:
-                    uploaded_file = client.files.upload(file=temp_file_path)
-                except Exception as e:
-                    logging.error(f"Voice upload error: {e}")
-
-            # --- เพิ่มส่วนนี้เพื่ออัปโหลดไฟล์เสียงไปที่ Gemini ---
-                try:
-                    uploaded_file = client.files.upload(file=temp_file_path)
-                except Exception as e:
-                    logging.error(f"Voice upload error: {e}")
-            # -----------------------------------------------
-            
-            input_text = "โปรดฟังไฟล์เสียงนี้และช่วยตอบคำถามหรือสรุปให้หน่อยครับ"
-            
-        # 2. จัดการไฟล์รูปภาพ
-        elif update.message.photo:
-            photo_file = await update.message.photo[-1].get_file()
-            temp_file_path = f"photo_{user_id}_{int(time.time())}.jpg"
-            await photo_file.download_to_drive(temp_file_path)
-            
-            if client:
-                try:
-                    uploaded_file = client.files.upload(file=temp_file_path)
-                except Exception as e:
-                    logging.error(f"File upload error encountered: {e}")
-            input_text = update.message.caption or "ช่วยอธิบายรูปภาพนี้ให้หน่อยครับ"
-            
-        # 3. จัดการข้อความ
-        else:
-            input_text = update.message.text or ""
-
-        if not input_text:
-            return
-
-        # บันทึกประวัติการสนทนา
-        if user_id not in user_histories:
-            user_histories[user_id] = []
-        
-        history = user_histories[user_id]
-        history.append(f"User: {input_text}")
-        
-        if len(history) > MAX_HISTORY_LENGTH:
-            user_histories[user_id] = history[-MAX_HISTORY_LENGTH:]
-
-        context_prompt = "\n".join(user_histories[user_id])
-        raw_reply = ""
-        
-        # ประมวลผลด้วย Gemini API ผ่าน Interactions API
-        if client:
-            try:
-                if uploaded_file:
-                    # เช็กว่าเป็นรูปภาพหรือไฟล์เสียง
-                    file_type = "image" if "image" in uploaded_file.mime_type else "audio"
+    extracted_data = ""
+    for url in urls:
+        try:
+            headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"}
+            response = requests.get(url, headers=headers, timeout=15)
+            if response.status_code == 200:
+                content_type = response.headers.get('Content-Type', '').lower()
+                if any(ext in url.lower() for ext in ['.py', '.js', '.html', '.txt', '.json', '.sh', '.csv', 'raw', 'script']) or 'text' in content_type or 'json' in content_type:
+                    page_content = response.text[:8000]
+                else:
+                    page_content = re.sub('<[^<]+?>', '', response.text)[:5000]
                     
-                    interaction = client.interactions.create(
-                        model="gemini-3.6-flash",
-                        input=[
-                            {"type": "text", "text": context_prompt},
-                            {
-                                "type": file_type,  # เปลี่ยนจากคำว่า "image" มาใช้ตัวแปร file_type
-                                "uri": uploaded_file.uri,
-                                "mime_type": uploaded_file.mime_type
-                            }
-                        ]
-                    )
-                    raw_reply = interaction.output_text if interaction.output_text else ""
+                extracted_data += f"\n[ข้อมูลเชิงลึกจากลิงก์/สคริปต์ {url}]:\n{page_content}\n"
+        except Exception as e:
+            print(f"Error fetching URL {url}: {e}")
+            
+    return text + "\n" + extracted_data
 
-        # ระบบ Fallback ไปยัง OpenRouter API ตามมาตรฐานสากล[span_2](start_span)[span_2](end_span)
-        if not raw_reply and OPENROUTER_API_KEY:
-            try:
-                response = requests.post(
-                    url="[https://openrouter.ai/api/v1/chat/completions](https://openrouter.ai/api/v1/chat/completions)",
-                    headers={
-                        "Authorization": f"Bearer {OPENROUTER_API_KEY}",
-                        "HTTP-Referer": RENDER_EXTERNAL_URL or "[https://ikalabot.onrender.com](https://ikalabot.onrender.com)",
-                        "X-OpenRouter-Title": "iKALABot",
-                        "Content-Type": "application/json"
-                    },
-                    json={
-                        "model": "anthropic/claude-3.5-sonnet",
-                        "messages": [{"role": "user", "content": context_prompt}]
-                    },
-                    timeout=30
-                )
-                data = response.json()
-                if "choices" in data and len(data["choices"]) > 0:
-                    raw_reply = data["choices"][0]["message"]["content"]
-            except Exception as e:
-                logging.error(f"OpenRouter fallback error encountered: {e}")
-
-        reply_text = clean_text(raw_reply or "ขออภัยครับ ระบบกำลังหนาแน่น กรุณาลองใหม่อีกครั้งในครู่ครับ")
-        user_histories[user_id].append(f"Bot: {reply_text}")
-
-        # ส่งข้อความตอบกลับ
-        await update.message.reply_text(reply_text)
-
-        # สร้างเสียง TTS และส่งกลับ
-        reply_audio_path = f"reply_{user_id}_{int(time.time())}.mp3"
-        tts = gTTS(text=reply_text, lang='th')
-        tts.save(reply_audio_path)
-        
-        with open(reply_audio_path, 'rb') as audio:
-            await update.message.reply_voice(voice=audio)
-
+# 1. จัดการข้อความตัวหนังสือ (ตอบกลับเป็นข้อความเท่านั้น ไม่ส่งไฟล์เสียง)
+@bot.message_handler(content_types=['text'])
+def reply_text(message):
+    raw_text = message.text
+    text_input = extract_url_content(raw_text)
+    
+    url = "https://openrouter.ai/api/v1/chat/completions"
+    headers = {
+        "Authorization": f"Bearer {API_KEY}",
+        "Content-Type": "application/json"
+    }
+    payload = {
+        "model": "google/gemini-2.5-flash:free",
+        "messages": [{"role": "user", "content": text_input}]
+    }
+    try:
+        response = requests.post(url, headers=headers, json=payload)
+        bot_reply = response.json()['choices'][0]['message']['content']
+        bot.reply_to(message, bot_reply)
     except Exception as e:
-        logging.error(f"Critical error in message handler: {e}")
-        await update.message.reply_text("เกิดข้อผิดพลาดขึ้นชั่วคราว ระบบได้ทำการป้องกันความปลอดภัยเรียบร้อยแล้วครับ")
+        print(f"Text error: {e}")
+        bot.reply_to(message, "ขออภัยจ้า สมองกลขัดข้องนิดหน่อยนะน้า")
+
+# 2. จัดการข้อความเสียง (ตอบกลับเป็นข้อความ + ส่งไฟล์เสียงตอบกลับ)
+@bot.message_handler(content_types=['voice'])
+def reply_voice(message):
+    bot.reply_to(message, "ได้รับเสียงแล้วครับน้า กำลังฟังและคิดคำตอบแป๊บน้า...")
+    audio_path = None
+    reply_audio_path = None
+    try:
+        file_info = bot.get_file(message.voice.file_id)
+        file_url = f"https://api.telegram.org/file/bot{TOKEN}/{file_info.file_path}"
+        audio_data = requests.get(file_url).content
+
+        audio_path = f"user_voice_{message.from_user.id}_{int(time.time())}.ogg"
+        with open(audio_path, "wb") as f:
+            f.write(audio_data)
+
+        with open(audio_path, "rb") as audio_file:
+            encoded_audio = base64.b64encode(audio_file.read()).decode('utf-8')
+
+        url = "https://openrouter.ai/api/v1/chat/completions"
+        headers = {
+            "Authorization": f"Bearer {API_KEY}",
+            "Content-Type": "application/json"
+        }
         
+        # ปรับปรุงโครงสร้าง Audio Payload ให้ถูกต้องตามข้อกำหนด OpenRouter
+        payload = {
+            "model": "google/gemini-2.5-flash:free",
+            "messages": [
+                {
+                    "role": "user",
+                    "content": [
+                        {"type": "text", "text": "กรุณาฟังเสียงนี้แล้วตอบคำถามกลับเป็นภาษาไทยสั้น ๆ กระชับและเป็นกันเอง"},
+                        {
+                            "type": "input_audio",
+                            "input_audio": {
+                                "data": encoded_audio,
+                                "format": "ogg"
+                            }
+                        }
+                    ]
+                }
+            ]
+        }
+
+        response = requests.post(url, headers=headers, json=payload)
+        bot_reply = response.json()['choices'][0]['message']['content']
+
+        # ส่งข้อความตัวหนังสือก่อน
+        bot.reply_to(message, bot_reply)
+
+        # สร้างไฟล์เสียง TTS และส่งกลับเฉพาะกรณีผู้ใช้ส่งเสียงมาเท่านั้น
+        if bot_reply.strip():
+            reply_audio_path = f"bot_reply_{message.from_user.id}_{int(time.time())}.mp3"
+            tts_text = bot_reply[:500] if len(bot_reply) > 500 else bot_reply
+            
+            tts = gTTS(text=tts_text, lang='th')
+            tts.save(reply_audio_path)
+            time.sleep(0.5)
+
+            if os.path.exists(reply_audio_path):
+                with open(reply_audio_path, "rb") as audio_reply:
+                    bot.send_voice(message.chat.id, audio_reply, reply_to_message_id=message.message_id)
+    except Exception as e:
+        print(f"Voice error: {e}")
+        bot.reply_to(message, "ขออภัยครับน้า ระบบเสียงขัดข้องนิดหน่อย ลองใหม่อีกครั้งนะครับ")
     finally:
-        for path in [temp_file_path, reply_audio_path]:
+        for path in [audio_path, reply_audio_path]:
             if path and os.path.exists(path):
                 try:
                     os.remove(path)
-                except Exception:
+                except:
                     pass
-        
-        if uploaded_file and client:
-            try:
-                client.files.delete(name=uploaded_file.name)
-            except Exception as e:
-                logging.error(f"Failed to delete file from Gemini: {e}")
 
-if __name__ == "__main__":
-    if not TELEGRAM_TOKEN:
-        print("ERROR: Missing TELEGRAM_TOKEN in environment variables.")
-    else:
-        app = ApplicationBuilder().token(TELEGRAM_TOKEN).build()
-        app.add_handler(CommandHandler("start", start))
-        app.add_handler(CommandHandler("clear", clear_chat))
-        app.add_handler(MessageHandler((filters.TEXT | filters.PHOTO | filters.VOICE) & ~filters.COMMAND, handle_message))
-        
-        # ตรวจสอบว่ารันบน Render หรือ Local
-        if RENDER_EXTERNAL_URL:
-            # === รันโหมด Webhook (สำหรับบน Render) ===
-            PORT = int(os.environ.get('PORT', 10000))
-            URL_PATH = TELEGRAM_TOKEN # ใช้ Token เป็น Path เพื่อความปลอดภัย
-            WEBHOOK_URL = f"{RENDER_EXTERNAL_URL.rstrip('/')}/{URL_PATH}"
-            
-            print(f"Starting Webhook on {WEBHOOK_URL} (Port: {PORT})")
-            app.run_webhook(
-                listen="0.0.0.0",
-                port=PORT,
-                url_path=URL_PATH,
-                webhook_url=WEBHOOK_URL
-            )
-        else:
-            # === รันโหมด Polling (สำหรับการทดสอบในคอมพิวเตอร์ตัวเอง) ===
-            print("Starting Long Polling (Local Mode)...")
-            app.run_polling()
-        
+bot.infinity_polling()
