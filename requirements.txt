@@ -1,11 +1,4 @@
+pyTelegramBotAPI
+requests
+google-genai
 Flask
-google-genai
-python-telegram-bot
-python-telegram-bot[webhooks]==22.8
-python-dotenv>=1.0.0
-Flask>=3.0.0
-gTTS>=2.5.0
-google-genai
-gTTS
-python-dotenv
-gunicorn
