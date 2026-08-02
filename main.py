@@ -15,8 +15,12 @@ def health_check():
     logger.info("Health check ping received.")
     return {"status": "ok", "message": "Bot is running perfectly!"}
 
-@app.post("/webhook")
+# รองรับทั้ง GET และ POST สำหรับ Webhook เพื่อให้ UptimeRobot เช็คได้
+@app.api_route("/webhook", methods=["GET", "POST"])
 async def receive_webhook(request: Request):
+    if request.method == "GET":
+        return {"status": "ok", "webhook": "active"}
+        
     data = await request.json()
     logger.info(f"Received Telegram Update: {data}")
     
@@ -24,23 +28,16 @@ async def receive_webhook(request: Request):
         chat_id = data["message"]["chat"]["id"]
         text = data["message"]["text"]
         
-        # 1. คำสั่งดูเวลา
         if text.startswith("/time"):
             send_message(chat_id, get_current_time())
-            
-        # 2. คำสั่งค้นหาเว็บ
         elif text.startswith("/search"):
             query = text.replace("/search", "").strip()
             if query:
                 send_message(chat_id, search_web(query))
             else:
                 send_message(chat_id, "กรุณาพิมพ์คำที่ต้องการค้นหาต่อท้าย เช่น /search อากาศวันนี้")
-                
-        # 3. คำสั่งเริ่มต้น
         elif text.startswith("/start"):
             send_message(chat_id, "สวัสดีครับ! iKALABot พร้อมใช้งานแล้ว\n- พิมพ์ /time เพื่อดูเวลา\n- พิมพ์ /search [คำค้น] เพื่อหาข้อมูล\n- หรือพิมพ์ข้อความทั่วไปเพื่อคุยกับ AI ได้เลยครับ")
-            
-        # 4. ข้อความทั่วไป -> ส่งให้ AI ตอบ
         else:
             ai_response = ask_openrouter(text)
             send_message(chat_id, ai_response)
