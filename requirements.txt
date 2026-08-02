@@ -1,4 +1,5 @@
-pyTelegramBotAPI
+fastapi
+uvicorn
 requests
-google-genai
-Flask
+python-dotenv
+python-multipart
