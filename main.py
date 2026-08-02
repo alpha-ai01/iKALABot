@@ -1,7 +1,10 @@
+import os
+import requests
+import uvicorn
 from fastapi import FastAPI, Request
 from utils.logger import logger
 import config
-import requests
+from utils.tools import get_current_time, search_web
 
 app = FastAPI()
 
@@ -20,7 +23,16 @@ async def receive_webhook(request: Request):
         chat_id = data["message"]["chat"]["id"]
         text = data["message"]["text"]
         
-        if text.startswith("/"):
+        # ระบบตรวจจับคำสั่ง (เวลาและค้นหา)
+        if text.startswith("/time"):
+            send_message(chat_id, get_current_time())
+        elif text.startswith("/search"):
+            query = text.replace("/search", "").strip()
+            if query:
+                send_message(chat_id, search_web(query))
+            else:
+                send_message(chat_id, "กรุณาพิมพ์คำที่ต้องการค้นหาต่อท้าย เช่น /search อากาศวันนี้")
+        elif text.startswith("/"):
             send_message(chat_id, f"Command received: {text} (Waiting for AI module...)")
         else:
             send_message(chat_id, f"Bot received: {text}")
@@ -34,3 +46,9 @@ def send_message(chat_id, text):
         requests.post(url, json=payload)
     except Exception as e:
         logger.error(f"Error sending message: {e}")
+
+# ===== จุดแก้ไข Application exited early =====
+if __name__ == "__main__":
+    # ให้ระบบรัน Uvicorn ค้างไว้และดึง Port อัตโนมัติจาก Render
+    port = int(os.environ.get("PORT", 8000))
+    uvicorn.run(app, host="0.0.0.0", port=port)

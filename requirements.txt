@@ -3,3 +3,8 @@ uvicorn
 requests
 python-dotenv
 python-multipart
+duckduckgo-search
+pytz
+duckduckgo-search
+pytz
+uvicorn
