@@ -12,7 +12,8 @@ def ask_openrouter(prompt: str) -> str:
         "Content-Type": "application/json"
     }
     payload = {
-        "model": "google/gemini-2.0-flash-lite-preview-02-05:free",
+        # เปลี่ยนรหัสโมเดลเป็นตัวที่ OpenRouter รองรับและเปิดให้ใช้ฟรี
+        "model": "google/gemini-2.0-flash-exp:free",
         "messages": [{"role": "user", "content": prompt}]
     }
     
@@ -20,7 +21,6 @@ def ask_openrouter(prompt: str) -> str:
         response = requests.post(url, json=payload, headers=headers, timeout=15)
         res_data = response.json()
         
-        # ตรวจสอบโครงสร้างคำตอบ เพื่อป้องกัน Error 'choices'
         if "choices" in res_data and len(res_data["choices"]) > 0:
             return res_data["choices"][0]["message"]["content"]
         elif "error" in res_data:
