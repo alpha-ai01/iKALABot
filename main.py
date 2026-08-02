@@ -1,60 +1,51 @@
 import os
 import requests
-import uvicorn
-from fastapi import FastAPI, Request
-from utils.logger import logger
-import config
-from utils.tools import get_current_time, search_web
-from ai.openrouter import ask_openrouter
+from google import genai
+from google.genai import types
 
-app = FastAPI()
+# Initialize Gemini Client
+client = genai.Client()
 
-@app.get("/")
-@app.get("/health")
-def health_check():
-    logger.info("Health check ping received.")
-    return {"status": "ok", "message": "Bot is running perfectly!"}
+def call_gemini_with_tools(prompt_text, tools_config=None):
+    config = types.GenerateContentConfig(tools=tools_config) if tools_config else None
+    response = client.models.generate_content(
+        model="gemini-3.6-flash",
+        contents=prompt_text,
+        config=config
+    )
+    return response
 
-# รองรับทั้ง GET และ POST สำหรับ Webhook เพื่อให้ UptimeRobot เช็คได้
-@app.api_route("/webhook", methods=["GET", "POST"])
-async def receive_webhook(request: Request):
-    if request.method == "GET":
-        return {"status": "ok", "webhook": "active"}
+def call_openrouter_api(messages, tools=None):
+    headers = {
+        "Authorization": f"Bearer {os.environ.get('OPENROUTER_API_KEY', '')}",
+        "Content-Type": "application/json"
+    }
+    payload = {
+        "model": "anthropic/claude-3.5-sonnet",
+        "input": messages,
+        "max_output_tokens": 9000
+    }
+    if tools:
+        payload["tools"] = tools
+        payload["tool_choice"] = "auto"
         
-    data = await request.json()
-    logger.info(f"Received Telegram Update: {data}")
-    
-    if "message" in data and "text" in data["message"]:
-        chat_id = data["message"]["chat"]["id"]
-        text = data["message"]["text"]
-        
-        if text.startswith("/time"):
-            send_message(chat_id, get_current_time())
-        elif text.startswith("/search"):
-            query = text.replace("/search", "").strip()
-            if query:
-                send_message(chat_id, search_web(query))
-            else:
-                send_message(chat_id, "กรุณาพิมพ์คำที่ต้องการค้นหาต่อท้าย เช่น /search อากาศวันนี้")
-        elif text.startswith("/start"):
-            send_message(chat_id, "สวัสดีครับ! iKALABot พร้อมใช้งานแล้ว\n- พิมพ์ /time เพื่อดูเวลา\n- พิมพ์ /search [คำค้น] เพื่อหาข้อมูล\n- หรือพิมพ์ข้อความทั่วไปเพื่อคุยกับ AI ได้เลยครับ")
-        else:
-            ai_response = ask_openrouter(text)
-            send_message(chat_id, ai_response)
-
-    return {"status": "ok"}
-
-def send_message(chat_id, text):
-    if not config.TELEGRAM_BOT_TOKEN:
-        logger.error("TELEGRAM_BOT_TOKEN is missing!")
-        return
-    url = f"https://api.telegram.org/bot{config.TELEGRAM_BOT_TOKEN}/sendMessage"
-    payload = {"chat_id": chat_id, "text": text}
-    try:
-        requests.post(url, json=payload)
-    except Exception as e:
-        logger.error(f"Error sending message: {e}")
+    response = requests.post("https://openrouter.ai/api/v1/responses", headers=headers, json=payload)
+    return response.json()
 
 if __name__ == "__main__":
-    port = int(os.environ.get("PORT", 8000))
-    uvicorn.run(app, host="0.0.0.0", port=port)
+    print("Telegram Chatbot configuration updated successfully with Gemini 3.6 Flash and Claude 3.5 Sonnet.")
+
+# เพิ่ม Health Check Endpoint รองรับ GET และ HEAD สำหรับ UptimeRobot
+try:
+    from flask import Flask
+    app = Flask(__name__)
+    
+    @app.route("/", methods=["GET", "HEAD"])
+    @app.route("/health", methods=["GET", "HEAD"])
+    def health_check():
+        return "OK", 200
+        
+    if __name__ == "__main__":
+        app.run(host="0.0.0.0", port=10000)
+except ImportError:
+    pass

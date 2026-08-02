@@ -1,9 +1,8 @@
 import os
-from dotenv import load_dotenv
 
-load_dotenv()
+# Model Configurations
+GEMINI_MODEL = "gemini-3.6-flash"
+OPENROUTER_MODEL = "anthropic/claude-3.5-sonnet"
 
-TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN", "")
-GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "")
-OPENROUTER_API_KEY = os.getenv("OPENROUTER_API_KEY", "")
-ADMIN_ID = os.getenv("ADMIN_ID", "")
+# API Endpoints & Headers
+OPENROUTER_API_URL = "https://openrouter.ai/api/v1/responses"
