@@ -239,3 +239,15 @@ def generate_futuristic_city_image():
     with open("generated_image.png", "wb") as f:
         f.write(base64.b64decode(interaction.output_image.data))
     return "generated_image.png"
+
+
+def stream_gemini_interaction(prompt="Explain how AI works"):
+    stream = client.interactions.create(
+        model="gemini-3.6-flash",
+        input=prompt,
+        stream=True
+    )
+    results = []
+    for event in stream:
+        results.append(str(event))
+    return results
