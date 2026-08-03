@@ -1,11 +1,11 @@
+pyTelegramBotAPI
+google-genai
+beautifulsoup4
+gTTS
 python-docx
+requests
+pydantic
 ruff
 pre-commit
 pylint
 bandit
-
-pyTelegramBotAPI
-
-google-genai
-
-beautifulsoup4
