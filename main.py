@@ -1,4 +1,20 @@
 import os
+import threading
+import http.server
+import socketserver
+
+def run_dummy_server():
+    port = int(os.environ.get("PORT", 8080))
+    try:
+        Handler = http.server.SimpleHTTPRequestHandler
+        with socketserver.TCPServer(("", port), Handler) as httpd:
+            httpd.serve_forever()
+    except Exception:
+        pass
+
+threading.Thread(target=run_dummy_server, daemon=True).start()
+
+import os
 import requests
 from google import genai
 from google.genai import types
