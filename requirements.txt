@@ -1,7 +1,5 @@
-pyTelegramBotAPI
-google-genai
-requests
-beautifulsoup4
-gTTS
-
 python-docx
+ruff
+pre-commit
+pylint
+bandit
