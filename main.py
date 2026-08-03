@@ -14,7 +14,7 @@ TELEGRAM_BOT_TOKEN = os.environ.get("TELEGRAM_BOT_TOKEN")
 OPENROUTER_API_KEY = os.environ.get("OPENROUTER_API_KEY")
 
 # ==========================================
-# 2. ระบบ Web Server จำลอง (ป้องกัน Render ปิดแอป)
+# 2. ระบบ Web Server จำลอง
 # ==========================================
 class MyHandler(http.server.SimpleHTTPRequestHandler):
     def do_GET(self):
@@ -50,10 +50,8 @@ else:
     @bot.message_handler(func=lambda message: True)
     def chat_with_ai(message):
         try:
-            # แสดงสถานะ "กำลังพิมพ์..."
             bot.send_chat_action(message.chat.id, 'typing')
             
-            # ส่งข้อความไปหา OpenRouter
             response = requests.post(
                 url="https://openrouter.ai/api/v1/chat/completions",
                 headers={
@@ -66,7 +64,6 @@ else:
                 })
             )
             
-            # แปลงข้อมูลที่ได้กลับมาและส่งเข้าแชท
             if response.status_code == 200:
                 result = response.json()
                 reply_text = result['choices'][0]['message']['content']
@@ -80,5 +77,10 @@ else:
 
     if __name__ == "__main__":
         threading.Thread(target=run_server, daemon=True).start()
+        
+        # --- ลบ Webhook เก่าที่ค้างอยู่ตรงนี้ ---
+        print("🔄 กำลังลบ Webhook เก่าที่ค้างอยู่...")
+        bot.remove_webhook()
+        
         print("✅ Telegram Bot (OpenRouter Mode) กำลังทำงาน...")
         bot.infinity_polling()
