@@ -508,3 +508,36 @@ def run_js_style_openrouter_reasoning(api_key="<OPENROUTER_API_KEY>"):
     )
     
     return resp2.json()
+
+
+import requests
+import json
+
+def run_openrouter_curl_stream(api_key="<OPENROUTER_API_KEY>"):
+    headers = {
+        "Content-Type": "application/json",
+        "Authorization": f"Bearer {api_key}"
+    }
+    payload = {
+        "model": "gemma-2-9b-it:free",
+        "stream": True,
+        "messages": [
+            {"role": "user", "content": "Hello"}
+        ]
+    }
+    
+    response = requests.post(
+        url="https://openrouter.ai/api/v1/chat/completions",
+        headers=headers,
+        data=json.dumps(payload),
+        stream=True
+    )
+    
+    stream_output = []
+    for line in response.iter_lines():
+        if line:
+            decoded = line.decode('utf-8')
+            stream_output.append(decoded)
+            print(decoded)
+            
+    return stream_output
