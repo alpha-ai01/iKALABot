@@ -227,3 +227,15 @@ def generate_structured_recipe(prompt_text="Give me a recipe for banana bread"):
     )
     recipe = Recipe.model_validate_json(interaction.output_text)
     return recipe
+
+
+import base64
+
+def generate_futuristic_city_image():
+    interaction = client.interactions.create(
+        model="gemini-3.1-flash-image",
+        input="Generate an image of a futuristic city skyline at sunset",
+    )
+    with open("generated_image.png", "wb") as f:
+        f.write(base64.b64decode(interaction.output_image.data))
+    return "generated_image.png"
