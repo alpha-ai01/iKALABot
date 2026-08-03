@@ -3,7 +3,7 @@ import http.server
 import socketserver
 import threading
 
-PORT = int(os.environ.get("PORT", 8080))
+PORT = int(os.environ.get("PORT", 10000))"PORT", 8080))
 
 class MyHandler(http.server.SimpleHTTPRequestHandler):
     def do_GET(self):
