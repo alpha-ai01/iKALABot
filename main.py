@@ -269,3 +269,33 @@ def execute_full_flow():
     )
     print("Response 2:", interaction2.output_text)
     return interaction2.output_text
+
+
+def handle_paw_calculation_response():
+    # Response JSON data from server-side state conversation
+    response_data = {
+        "id": "v2_Chd...",
+        "status": "completed",
+        "usage": {
+            "total_tokens": 240,
+            "total_input_tokens": 60,
+            "total_output_tokens": 20
+        },
+        "steps": [
+            {
+                "type": "model_output",
+                "content": [
+                    {
+                        "type": "text",
+                        "text": "There are 8 paws in your house. 2 dogs \u00d7 4 paws = 8 paws."
+                    }
+                ]
+            }
+        ],
+        "object": "interaction",
+        "model": "gemini-3.6-flash"
+    }
+    
+    text_output = response_data["steps"][0]["content"][0]["text"]
+    print("Parsed Output:", text_output)
+    return text_output
