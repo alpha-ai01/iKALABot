@@ -161,4 +161,4 @@ else:
         except Exception:
             pass
         logger.info("Telegram Bot is starting polling...")
-        bot.infinity_polling(timeout=60, long_polling_timeout=60, skip_pending=True)
+        bot.infinity_polling(timeout=60, long_polling_timeout=60)
