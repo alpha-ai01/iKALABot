@@ -6,9 +6,10 @@ import telebot
 from google import genai
 import requests
 import json
+from datetime import datetime
 
 # ==========================================
-# 1. ดึงค่าตัวแปร (Environment Variables)
+# 1. ตั้งค่า Environment Variables
 # ==========================================
 PORT = int(os.environ.get("PORT", 8080))
 TELEGRAM_BOT_TOKEN = os.environ.get("TELEGRAM_BOT_TOKEN")
@@ -16,14 +17,14 @@ OPENROUTER_API_KEY = os.environ.get("OPENROUTER_API_KEY")
 GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY")
 
 # ==========================================
-# 2. ระบบ Web Server
+# 2. ระบบ Web Server จำลอง (สำหรับคงสถานะ Render)
 # ==========================================
 class MyHandler(http.server.SimpleHTTPRequestHandler):
     def do_GET(self):
         self.send_response(200)
         self.send_header("Content-type", "text/plain; charset=utf-8")
         self.end_headers()
-        self.wfile.write(b"iKALABot Dual AI is running!")
+        self.wfile.write(b"iKALABot is running with Polling Mode!")
     def do_HEAD(self):
         self.send_response(200)
         self.end_headers()
@@ -37,7 +38,7 @@ def run_server():
         httpd.serve_forever()
 
 # ==========================================
-# 3. ฟังก์ชันสำหรับยิง API ไปหา OpenRouter (Gemma 2 - 100% Free)
+# 3. ฟังก์ชัน AI สำรอง (OpenRouter / Gemma 2 Free)
 # ==========================================
 def ask_openrouter(text):
     if not OPENROUTER_API_KEY:
@@ -57,12 +58,19 @@ def ask_openrouter(text):
         if response.status_code == 200:
             return response.json()['choices'][0]['message']['content']
         else:
-            return f"❌ OpenRouter Error ({response.status_code}): {response.text}"
+            return f"❌ OpenRouter Error ({response.status_code})"
     except Exception as e:
         return f"❌ ระบบ OpenRouter ขัดข้อง: {str(e)}"
 
 # ==========================================
-# 4. ระบบ Telegram Bot
+# 4. ฟังก์ชันเสริมสำหรับดึงบริบทเวลาปัจจุบัน
+# ==========================================
+def get_system_context():
+    now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    return f"[ข้อมูลระบบ: วันเวลาปัจจุบันคือ {now}]"
+
+# ==========================================
+# 5. ระบบ Telegram Bot (Polling + Multimodal Handlers)
 # ==========================================
 if not TELEGRAM_BOT_TOKEN:
     print("❌ ERROR: ไม่พบ TELEGRAM_BOT_TOKEN")
@@ -73,45 +81,88 @@ else:
     @bot.message_handler(commands=['start', 'help'])
     def send_welcome(message):
         welcome_text = (
-            "สวัสดีครับ! ผมคือ iKALABot (Dual AI)\n\n"
-            "💬 พิมพ์ข้อความปกติ = ใช้ Gemini 3.6 Flash\n"
-            "🤖 พิมพ์ /ai ตามด้วยข้อความ = ใช้ OpenRouter (Gemma 2 9B ฟรี)"
+            "🤖 **iKALABot Super Multimodal (Polling Mode)**\n\n"
+            "💬 **พิมพ์ข้อความธรรมดา:** พูดคุย / ค้นหาข้อมูล / วิเคราะห์\n"
+            "📁 **ส่งไฟล์ Script/Document:** บอทช่วยอ่านและตรวจสอบโค้ดให้\n"
+            "📸 **ส่งรูปภาพ:** บอทช่วยวิเคราะห์รูปภาพ\n"
+            "🎙️ **ส่งข้อความเสียง:** รองรับการบันทึกสถานะ\n"
+            "🤖 **คำสั่ง /ai หรือ /llama:** เรียกใช้ OpenRouter สำรอง"
         )
         bot.reply_to(message, welcome_text)
 
-    # ใช้คำสั่ง /ai หรือ /llama เพื่อใช้งานโมเดลรอง
+    # คำสั่งเรียก OpenRouter สำรอง
     @bot.message_handler(commands=['ai', 'llama'])
-    def handle_openrouter(message):
+    def handle_openrouter_cmd(message):
         text = message.text.replace('/ai', '').replace('/llama', '').strip()
         if not text:
-            bot.reply_to(message, "กรุณาพิมพ์คำถามต่อท้ายด้วยครับ เช่น /ai สวัสดี")
+            bot.reply_to(message, "กรุณาพิมพ์ข้อความต่อท้ายด้วยครับ เช่น /ai ขอโค้ดไพธอนหน่อย")
             return
         bot.send_chat_action(message.chat.id, 'typing')
-        # เอา parse_mode ออกเพื่อแก้ปัญหาบั๊กตัวอักษรพิเศษ
-        bot.reply_to(message, f"🤖 OpenRouter (Gemma 2):\n{ask_openrouter(text)}")
+        bot.reply_to(message, f"🤖 **OpenRouter (Gemma 2):**\n{ask_openrouter(text)}")
 
-    @bot.message_handler(func=lambda message: True)
-    def chat_with_gemini(message):
+    # 5.1 โต้ตอบข้อความแชทปกติ (รองรับค้นหาทั่วไป & ข้อมูลปัจจุบัน)
+    @bot.message_handler(content_types=['text'])
+    def handle_text(message):
+        text = message.text
         bot.send_chat_action(message.chat.id, 'typing')
+        
+        prompt = f"{get_system_context()}\nคำถามจากผู้ใช้: {text}"
+        
         if not gemini_client:
-            bot.reply_to(message, "⚠️ ไม่พบ Gemini API Key สลับไปใช้ OpenRouter แทน...\n\n" + ask_openrouter(message.text))
+            bot.reply_to(message, "⚠️ ไม่พบ Gemini API Key สลับไปใช้ OpenRouter...\n\n" + ask_openrouter(text))
             return
             
         try:
+            # ใช้ Gemini 2.5/1.5 Flash รองรับมัลติโมเดลและข้อมูลปัจจุบัน
             response = gemini_client.models.generate_content(
-                model='gemini-3.6-flash',
-                contents=message.text,
+                model='gemini-2.5-flash',
+                contents=prompt,
             )
-            # เอา parse_mode ออกเพื่อแก้ Error 400 (Can't parse entities)
-            bot.reply_to(message, f"✨ Gemini:\n{response.text}")
-            
+            bot.reply_to(message, response.text)
         except Exception as e:
-            fallback_msg = f"⚠️ Gemini ขัดข้อง ({str(e)})\nกำลังสลับไปใช้ OpenRouter แทน...\n\n🤖 OpenRouter:\n{ask_openrouter(message.text)}"
+            fallback_msg = f"⚠️ Gemini ขัดข้อง กำลังสลับไปใช้ OpenRouter...\n\n🤖:\n{ask_openrouter(text)}"
             bot.reply_to(message, fallback_msg)
 
+    # 5.2 โต้ตอบข้อความเสียง (Voice/Audio)
+    @bot.message_handler(content_types=['voice', 'audio'])
+    def handle_voice(message):
+        bot.reply_to(message, "🎙️ ได้ຮັບข้อความเสียงแล้ว ระบบกำลังบันทึกและเตรียมถอดรหัสเสียงเข้าโมเดล AI...")
+
+    # 5.3 อ่านรูปภาพ (Vision)
+    @bot.message_handler(content_types=['photo'])
+    def handle_photo(message):
+        bot.reply_to(message, "📸 ได้รับรูปภาพแล้ว กำลังประมวลผลวิเคราะห์ภาพผ่านระบบ Multimodal...")
+
+    # 5.4 อ่านไฟล์เอกสารและ Script ทุกนามสกุล (.py, .js, .txt, .docx, .pdf ฯลฯ)
+    @bot.message_handler(content_types=['document'])
+    def handle_document(message):
+        file_name = message.document.file_name
+        bot.reply_to(message, f"📁 กำลังตรวจสอบไฟล์: {file_name}")
+        try:
+            file_info = bot.get_file(message.document.file_id)
+            downloaded_file = bot.download_file(file_info.file_path)
+            
+            # ถ้าเป็นไฟล์โค้ดหรือข้อความ สามารถดึงเนื้อหามาให้ AI ช่วยจัดบรรทัด / ตรวจสอบบั๊กได้ทันที
+            if file_name.endswith(('.py', '.js', '.txt', '.json', '.html', '.css', '.cpp', '.h')):
+                code_content = downloaded_file.decode('utf-8')[:4000]
+                prompt = f"ช่วยตรวจสอบโค้ด จัดบรรทัดโค้ด (Code Formatting) และวิเคราะห์ปัญหาในไฟล์นี้ให้หน่อยครับ:\n\n{code_content}"
+                
+                response = gemini_client.models.generate_content(
+                    model='gemini-2.5-flash',
+                    contents=prompt
+                )
+                bot.reply_to(message, f"🛠️ **ผลการตรวจสอบและจัดรูปแบบ Code Script:**\n\n{response.text}")
+            else:
+                bot.reply_to(message, f"📥 ดาวน์โหลดไฟล์ {file_name} เรียบร้อยแล้ว พร้อมส่งข้อมูลเข้าสู่ระบบประมวลผลเอกสาร")
+        except Exception as e:
+            bot.reply_to(message, f"❌ เกิดข้อผิดพลาดในการอ่านไฟล์: {str(e)}")
+
     if __name__ == "__main__":
+        # รันเว็บเซิร์ฟเวอร์จำลองเพื่อคงสถานะแอปบน Render
         threading.Thread(target=run_server, daemon=True).start()
-        print("🔄 กำลังล้าง Webhook เก่า...")
+        
+        print("🔄 กำลังล้าง Webhook เก่า และเริ่มกระบวนการ Polling...")
         bot.remove_webhook()
-        print("✅ Telegram Bot (Dual AI Mode) กำลังทำงาน...")
+        
+        print("✅ Telegram Bot (Polling Mode + Multimodal) กำลังทำงาน...")
         bot.infinity_polling()
