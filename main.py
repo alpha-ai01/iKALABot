@@ -24,7 +24,7 @@ class MyHandler(http.server.SimpleHTTPRequestHandler):
         self.send_response(200)
         self.send_header("Content-type", "text/plain; charset=utf-8")
         self.end_headers()
-        self.wfile.write(b"iKALABot is running with Polling Mode!")
+        self.wfile.write(b"iKALABot is running with Gemini 3.6 Flash & Polling Mode!")
     def do_HEAD(self):
         self.send_response(200)
         self.end_headers()
@@ -67,7 +67,7 @@ def ask_openrouter(text):
 # ==========================================
 def get_system_context():
     now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-    return f"[ข้อมูลระบบ: วันเวลาปัจจุบันคือ {now}]"
+    return f"[ข้อมูลระบบ: วันเวลาปัจจุบันคือ {now} น.]"
 
 # ==========================================
 # 5. ระบบ Telegram Bot (Polling + Multimodal Handlers)
@@ -81,11 +81,11 @@ else:
     @bot.message_handler(commands=['start', 'help'])
     def send_welcome(message):
         welcome_text = (
-            "🤖 **iKALABot Super Multimodal (Polling Mode)**\n\n"
-            "💬 **พิมพ์ข้อความธรรมดา:** พูดคุย / ค้นหาข้อมูล / วิเคราะห์\n"
-            "📁 **ส่งไฟล์ Script/Document:** บอทช่วยอ่านและตรวจสอบโค้ดให้\n"
-            "📸 **ส่งรูปภาพ:** บอทช่วยวิเคราะห์รูปภาพ\n"
-            "🎙️ **ส่งข้อความเสียง:** รองรับการบันทึกสถานะ\n"
+            "🤖 **iKALABot (Gemini 3.6 Flash Engine)**\n\n"
+            "💬 **พิมพ์ข้อความธรรมดา:** สนทนา / ค้นหาข้อมูลข่าวสารปัจจุบัน\n"
+            "📁 **ส่งไฟล์ Script / Document:** บอทช่วยอ่าน ตรวจสอบ และจัดรูปแบบโค้ด\n"
+            "📸 **ส่งรูปภาพ:** บอทช่วยวิเคราะห์ภาพผ่านระบบมัลติโมเดล\n"
+            "🎙️ **ส่งข้อความเสียง:** รองรับการบันทึกสถานะข้อความเสียง\n"
             "🤖 **คำสั่ง /ai หรือ /llama:** เรียกใช้ OpenRouter สำรอง"
         )
         bot.reply_to(message, welcome_text)
@@ -100,7 +100,7 @@ else:
         bot.send_chat_action(message.chat.id, 'typing')
         bot.reply_to(message, f"🤖 **OpenRouter (Gemma 2):**\n{ask_openrouter(text)}")
 
-    # 5.1 โต้ตอบข้อความแชทปกติ (รองรับค้นหาทั่วไป & ข้อมูลปัจจุบัน)
+    # 5.1 โต้ตอบข้อความแชทปกติ (รองรับ Gemini 3.6 Flash และบริบทเวลาปัจจุบัน)
     @bot.message_handler(content_types=['text'])
     def handle_text(message):
         text = message.text
@@ -113,9 +113,9 @@ else:
             return
             
         try:
-            # ใช้ Gemini 2.5/1.5 Flash รองรับมัลติโมเดลและข้อมูลปัจจุบัน
+            # ใช้ Gemini 3.6 Flash ตามที่กำหนด
             response = gemini_client.models.generate_content(
-                model='gemini-2.5-flash',
+                model='gemini-3.6-flash',
                 contents=prompt,
             )
             bot.reply_to(message, response.text)
@@ -126,7 +126,7 @@ else:
     # 5.2 โต้ตอบข้อความเสียง (Voice/Audio)
     @bot.message_handler(content_types=['voice', 'audio'])
     def handle_voice(message):
-        bot.reply_to(message, "🎙️ ได้ຮັບข้อความเสียงแล้ว ระบบกำลังบันทึกและเตรียมถอดรหัสเสียงเข้าโมเดล AI...")
+        bot.reply_to(message, "🎙️ ได้รับข้อความเสียงแล้ว ระบบกำลังบันทึกและเตรียมถอดรหัสเสียงเข้าโมเดล AI...")
 
     # 5.3 อ่านรูปภาพ (Vision)
     @bot.message_handler(content_types=['photo'])
@@ -145,10 +145,10 @@ else:
             # ถ้าเป็นไฟล์โค้ดหรือข้อความ สามารถดึงเนื้อหามาให้ AI ช่วยจัดบรรทัด / ตรวจสอบบั๊กได้ทันที
             if file_name.endswith(('.py', '.js', '.txt', '.json', '.html', '.css', '.cpp', '.h')):
                 code_content = downloaded_file.decode('utf-8')[:4000]
-                prompt = f"ช่วยตรวจสอบโค้ด จัดบรรทัดโค้ด (Code Formatting) และวิเคราะห์ปัญหาในไฟล์นี้ให้หน่อยครับ:\n\n{code_content}"
+                prompt = f"{get_system_context()}\nช่วยตรวจสอบโค้ด จัดบรรทัดโค้ด (Code Formatting) และวิเคราะห์ปัญหาในไฟล์นี้ให้หน่อยครับ:\n\n{code_content}"
                 
                 response = gemini_client.models.generate_content(
-                    model='gemini-2.5-flash',
+                    model='gemini-3.6-flash',
                     contents=prompt
                 )
                 bot.reply_to(message, f"🛠️ **ผลการตรวจสอบและจัดรูปแบบ Code Script:**\n\n{response.text}")
@@ -164,5 +164,5 @@ else:
         print("🔄 กำลังล้าง Webhook เก่า และเริ่มกระบวนการ Polling...")
         bot.remove_webhook()
         
-        print("✅ Telegram Bot (Polling Mode + Multimodal) กำลังทำงาน...")
+        print("✅ Telegram Bot (Gemini 3.6 Flash + Polling Mode) กำลังทำงาน...")
         bot.infinity_polling()
