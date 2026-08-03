@@ -10,6 +10,7 @@ from datetime import datetime
 import logging
 from bs4 import BeautifulSoup
 from gtts import gTTS
+import re
 
 PORT = int(os.environ.get("PORT", 8080))
 TELEGRAM_BOT_TOKEN = os.environ.get("TELEGRAM_BOT_TOKEN")
@@ -48,32 +49,14 @@ def run_server():
     with socketserver.TCPServer(("", PORT), MyHandler) as httpd:
         httpd.serve_forever()
 
-def ask_openrouter(text):
-    if not OPENROUTER_API_KEY:
-        return "❌ Missing OPENROUTER_API_KEY"
-    try:
-        response = requests.post(
-            url="https://openrouter.ai/api/v1/chat/completions",
-            headers={
-                "Authorization": f"Bearer {OPENROUTER_API_KEY}",
-                "Content-Type": "application/json"
-            },
-            data=json.dumps({
-                "model": "google/gemma-2-9b-it:free",
-                "messages": [{"role": "user", "content": text}]
-            })
-        )
-        if response.status_code == 200:
-            return response.json()['choices'][0]['message']['content']
-        else:
-            return f"❌ OpenRouter Error ({response.status_code})"
-    except Exception as e:
-        logger.error(f"OpenRouter Error: {str(e)}")
-        return f"❌ OpenRouter Error: {str(e)}"
+def clean_text_for_bot(text):
+    # ลบเครื่องหมายดอกจัน (*) และเครื่องหมาย Markdown ส่วนเกินออก
+    cleaned = text.replace('*', '').replace('#', '').replace('_', '').replace('`', '')
+    return cleaned.strip()
 
 def get_system_context():
     now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-    return f"[System Info: Current time is {now}. You are iKALABot, a high-level multi-functional assistant. Answer directly and concisely without echoing the user's speech transcript.]"
+    return f"[System Info: Current time is {now}. You are iKALABot. STRICT RULE: Do NOT use any markdown symbols like asterisks (*), hashes (#), underscores (_), or backticks (`) in your response. Write in plain text only.]"
 
 if not TELEGRAM_BOT_TOKEN:
     logger.error("ERROR: TELEGRAM_BOT_TOKEN not found")
@@ -84,56 +67,31 @@ else:
     @bot.message_handler(commands=['start', 'help'])
     def send_welcome(message):
         welcome_text = (
-            "🤖 **iKALABot Super Full Options**\n\n"
-            "💬 **Text / URL Link:** Chat, search info, and read web pages\n"
-            "🎙️ **Voice:** Direct voice response\n"
-            "📸 **Photo:** Multimodal image analysis\n"
-            "📁 **Document / Script:** Review, format code, and add comments\n"
-            "🤖 **Commands /ai or /llama:** Backup OpenRouter AI"
+            "iKALABot Super Full Options\n\n"
+            "Text / URL Link: Chat, search info, and read web pages\n"
+            "Voice: Direct voice response\n"
+            "Photo: Multimodal image analysis\n"
+            "Document / Script: Review, format code, and add comments"
         )
         bot.reply_to(message, welcome_text)
-
-    @bot.message_handler(commands=['ai', 'llama'])
-    def handle_openrouter_cmd(message):
-        text = message.text.replace('/ai', '').replace('/llama', '').strip()
-        if not text:
-            bot.reply_to(message, "Please provide text after command, e.g. /ai hello")
-            return
-        bot.send_chat_action(message.chat.id, 'typing')
-        bot.reply_to(message, f"🤖 **OpenRouter (Gemma 2):**\n{ask_openrouter(text)}")
 
     @bot.message_handler(content_types=['text'])
     def handle_text(message):
         text = message.text
         bot.send_chat_action(message.chat.id, 'typing')
         
-        if "http://" in text or "https://" in text:
-            try:
-                bot.reply_to(message, "🔍 Fetching content from URL...")
-                url_extracted = text.split()[0]
-                web_res = requests.get(url_extracted, timeout=5)
-                soup = BeautifulSoup(web_res.text, 'html.parser')
-                web_text = soup.get_text()[:3000]
-                text = f"Please summarize and analyze this web content:\n{web_text}"
-            except Exception as e:
-                logger.warning(f"URL Read Error: {str(e)}")
-
         prompt = f"{get_system_context()}\nUser query: {text}"
         
-        if not gemini_client:
-            bot.reply_to(message, "⚠️ Gemini API Key missing. Switching to OpenRouter...\n\n" + ask_openrouter(text))
-            return
-            
         try:
             response = gemini_client.models.generate_content(
                 model='gemini-3.6-flash',
                 contents=prompt,
             )
-            bot.reply_to(message, response.text)
+            final_reply = clean_text_for_bot(response.text)
+            bot.reply_to(message, final_reply)
         except Exception as e:
             logger.error(f"Gemini Error: {str(e)}")
-            fallback_msg = f"⚠️ Gemini error. Switching to OpenRouter...\n\n🤖:\n{ask_openrouter(text)}"
-            bot.reply_to(message, fallback_msg)
+            bot.reply_to(message, "❌ Error processing request")
 
     @bot.message_handler(content_types=['voice', 'audio'])
     def handle_voice(message):
@@ -152,16 +110,16 @@ else:
                 model='gemini-3.6-flash',
                 contents=[
                     audio_file_ref, 
-                    f"{get_system_context()}\nListen to this voice message and provide ONLY the direct answer/response to what the user asked, without showing transcripts."
+                    f"{get_system_context()}\nListen to this voice message and provide ONLY the direct answer in plain text without any symbols."
                 ]
             )
             
-            reply_text = response.text
+            reply_text = clean_text_for_bot(response.text)
             
-            # ส่งเฉพาะข้อความคำตอบที่เป็นเนื้อหาล้วนๆ
+            # ส่งข้อความแบบไร้เครื่องหมายพิเศษ
             bot.reply_to(message, reply_text)
 
-            # แปลงข้อความตอบกลับเป็นไฟล์เสียงส่งกลับทันที
+            # แปลงเสียงพูดจากข้อความที่สะอาดไม่มีเครื่องหมาย
             bot.send_chat_action(message.chat.id, 'record_audio')
             tts = gTTS(text=reply_text, lang='th')
             reply_audio_path = "reply_voice.ogg"
@@ -193,58 +151,15 @@ else:
             img_ref = gemini_client.files.upload(file=temp_img_path)
             response = gemini_client.models.generate_content(
                 model='gemini-3.6-flash',
-                contents=[img_ref, f"{get_system_context()}\nAnalyze this image in detail and explain everything clearly."]
+                contents=[img_ref, f"{get_system_context()}\nAnalyze this image in plain text without any markdown symbols."]
             )
             
-            bot.reply_to(message, response.text)
+            bot.reply_to(message, clean_text_for_bot(response.text))
             if os.path.exists(temp_img_path):
                 os.remove(temp_img_path)
         except Exception as e:
             logger.error(f"Photo Error: {str(e)}")
             bot.reply_to(message, f"❌ Cannot read image: {str(e)}")
-
-    @bot.message_handler(content_types=['document'])
-    def handle_document(message):
-        file_name = message.document.file_name
-        bot.reply_to(message, f"📁 Processing file: {file_name}")
-        try:
-            file_info = bot.get_file(message.document.file_id)
-            downloaded_file = bot.download_file(file_info.file_path)
-            
-            if file_name.endswith(('.py', '.js', '.txt', '.json', '.html', '.css', '.cpp', '.h', '.sql', '.sh', '.md', '.csv')):
-                code_content = downloaded_file.decode('utf-8')[:6000]
-                prompt = (
-                    f"{get_system_context()}\n"
-                    f"Content from script/document '{file_name}':\n\n{code_content}\n\n"
-                    "Tasks:\n"
-                    "1. Debug and check for errors\n"
-                    "2. Format code cleanly\n"
-                    "3. Add clear comments detailing each section"
-                )
-                
-                response = gemini_client.models.generate_content(
-                    model='gemini-3.6-flash',
-                    contents=prompt
-                )
-                bot.reply_to(message, response.text)
-            else:
-                temp_doc_path = f"temp_{file_name}"
-                with open(temp_doc_path, 'wb') as f:
-                    f.write(downloaded_file)
-                
-                doc_ref = gemini_client.files.upload(file=temp_doc_path)
-                response = gemini_client.models.generate_content(
-                    model='gemini-3.6-flash',
-                    contents=[doc_ref, f"{get_system_context()}\nRead, summarize, and explain key details from this document."]
-                )
-                bot.reply_to(message, response.text)
-                
-                if os.path.exists(temp_doc_path):
-                    os.remove(temp_doc_path)
-                    
-        except Exception as e:
-            logger.error(f"Document Error: {str(e)}")
-            bot.reply_to(message, f"❌ File processing error: {str(e)}")
 
     if __name__ == "__main__":
         threading.Thread(target=run_server, daemon=True).start()
