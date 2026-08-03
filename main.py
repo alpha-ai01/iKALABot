@@ -82,7 +82,7 @@ else:
     def send_welcome(message):
         chat_id = message.chat.id
         chat_histories[chat_id] = []
-        welcome_text = "iKALABot Ready (Memory & Clean Text Enabled)"
+        welcome_text = "iKALABot Ready (gemini-3.6-flash & Clean Text Enabled)"
         bot.reply_to(message, welcome_text)
 
     @bot.message_handler(content_types=['text'])
@@ -96,7 +96,7 @@ else:
         
         try:
             response = gemini_client.models.generate_content(
-                model='gemini-2.5-flash',
+                model='gemini-3.6-flash',
                 contents=prompt,
             )
             final_reply = clean_text_for_bot(response.text)
@@ -122,7 +122,7 @@ else:
             audio_file_ref = gemini_client.files.upload(file=temp_audio_path)
             
             response = gemini_client.models.generate_content(
-                model='gemini-2.5-flash',
+                model='gemini-3.6-flash',
                 contents=[
                     audio_file_ref, 
                     f"{get_system_context(chat_id)}\nListen to this voice message, consider history, and provide ONLY the direct answer in plain text."
