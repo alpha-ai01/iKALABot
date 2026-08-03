@@ -73,7 +73,7 @@ def ask_openrouter(text):
 
 def get_system_context():
     now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-    return f"[System Info: Current time is {now}. You are iKALABot, a high-level multi-functional assistant.]"
+    return f"[System Info: Current time is {now}. You are iKALABot, a high-level multi-functional assistant. Answer directly and concisely without echoing the user's speech transcript.]"
 
 if not TELEGRAM_BOT_TOKEN:
     logger.error("ERROR: TELEGRAM_BOT_TOKEN not found")
@@ -86,7 +86,7 @@ else:
         welcome_text = (
             "🤖 **iKALABot Super Full Options**\n\n"
             "💬 **Text / URL Link:** Chat, search info, and read web pages\n"
-            "🎙️ **Voice:** Transcribe, reply with text, and send back a Voice Message!\n"
+            "🎙️ **Voice:** Direct voice response\n"
             "📸 **Photo:** Multimodal image analysis\n"
             "📁 **Document / Script:** Review, format code, and add comments\n"
             "🤖 **Commands /ai or /llama:** Backup OpenRouter AI"
@@ -146,30 +146,30 @@ else:
             with open(temp_audio_path, 'wb') as f:
                 f.write(downloaded_file)
             
-            bot.reply_to(message, "🎙️ Processing your voice message...")
             audio_file_ref = gemini_client.files.upload(file=temp_audio_path)
             
             response = gemini_client.models.generate_content(
                 model='gemini-3.6-flash',
                 contents=[
                     audio_file_ref, 
-                    f"{get_system_context()}\nListen to this voice message, transcribe it, and provide a direct, concise response to the user's request."
+                    f"{get_system_context()}\nListen to this voice message and provide ONLY the direct answer/response to what the user asked, without showing transcripts."
                 ]
             )
             
             reply_text = response.text
-            bot.reply_to(message, f"🗣️ **Transcription & Answer:**\n\n{reply_text}")
+            
+            # ส่งเฉพาะข้อความคำตอบที่เป็นเนื้อหาล้วนๆ
+            bot.reply_to(message, reply_text)
 
-            # แปลงข้อความตอบกลับเป็นไฟล์เสียง (Voice Message) ส่งกลับหาผู้ใช้
+            # แปลงข้อความตอบกลับเป็นไฟล์เสียงส่งกลับทันที
             bot.send_chat_action(message.chat.id, 'record_audio')
             tts = gTTS(text=reply_text, lang='th')
             reply_audio_path = "reply_voice.ogg"
             tts.save(reply_audio_path)
 
             with open(reply_audio_path, 'rb') as audio:
-                bot.send_voice(message.chat.id, audio, caption="🔊 ข้อความเสียงตอบกลับจากบอท")
+                bot.send_voice(message.chat.id, audio)
 
-            # ลบไฟล์ชั่วคราว
             if os.path.exists(temp_audio_path):
                 os.remove(temp_audio_path)
             if os.path.exists(reply_audio_path):
@@ -196,7 +196,7 @@ else:
                 contents=[img_ref, f"{get_system_context()}\nAnalyze this image in detail and explain everything clearly."]
             )
             
-            bot.reply_to(message, f"📸 **Image Analysis Result:**\n\n{response.text}")
+            bot.reply_to(message, response.text)
             if os.path.exists(temp_img_path):
                 os.remove(temp_img_path)
         except Exception as e:
@@ -226,7 +226,7 @@ else:
                     model='gemini-3.6-flash',
                     contents=prompt
                 )
-                bot.reply_to(message, f"🛠️ **Script Analysis & Formatting Result:**\n\n{response.text}")
+                bot.reply_to(message, response.text)
             else:
                 temp_doc_path = f"temp_{file_name}"
                 with open(temp_doc_path, 'wb') as f:
@@ -237,7 +237,7 @@ else:
                     model='gemini-3.6-flash',
                     contents=[doc_ref, f"{get_system_context()}\nRead, summarize, and explain key details from this document."]
                 )
-                bot.reply_to(message, f"📄 **Document Summary ({file_name}):**\n\n{response.text}")
+                bot.reply_to(message, response.text)
                 
                 if os.path.exists(temp_doc_path):
                     os.remove(temp_doc_path)
