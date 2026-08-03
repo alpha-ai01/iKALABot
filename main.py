@@ -299,3 +299,12 @@ def handle_paw_calculation_response():
     text_output = response_data["steps"][0]["content"][0]["text"]
     print("Parsed Output:", text_output)
     return text_output
+
+
+def explain_ai_briefly():
+    interaction = client.interactions.create(
+        model="gemini-3.6-flash",
+        input="Explain how AI works in a few words"
+    )
+    print("AI Explanation:", interaction.output_text)
+    return interaction.output_text
