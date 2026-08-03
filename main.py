@@ -162,3 +162,46 @@ else:
             pass
         logger.info("Telegram Bot is starting polling...")
         bot.infinity_polling(timeout=60, long_polling_timeout=60)
+
+
+def call_gemini_interaction(prompt_text, media_files=None, use_search=True):
+    tools_config = [{"type": "google_search"}] if use_search else []
+    
+    # เรียกใช้งานผ่าน client.interactions.create ตามโครงสร้างใหม่
+    interaction = client.interactions.create(
+        model="gemini-3.6-flash",
+        input=prompt_text,
+        tools=tools_config
+    )
+    
+    response_text = ""
+    citations = []
+    
+    # ดึงข้อความและ Annotation (Citations) จาก step
+    if hasattr(interaction, 'steps') and interaction.steps:
+        for step in interaction.steps:
+            if step.type == "model_output":
+                for content_block in step.content:
+                    if content_block.type == "text":
+                        response_text += content_block.text
+                        if content_block.annotations:
+                            for annotation in content_block.annotations:
+                                if annotation.type == "url_citation":
+                                    citations.append(f"[{annotation.title}]({annotation.url})")
+                                    
+    # หากผลลัพธ์เป็นโครงสร้าง dict หรือ JSON คล้ายโครงสร้าง API Response ดิบ
+    elif isinstance(interaction, dict):
+        steps = interaction.get("steps", [])
+        for step in steps:
+            if step.get("type") == "model_output":
+                for content_block in step.get("content", []):
+                    if content_block.get("type") == "text":
+                        response_text += content_block.get("text", "")
+                        for annotation in content_block.get("annotations", []):
+                            if annotation.get("type") == "url_citation":
+                                citations.append(f"[{annotation.get('title')}]({annotation.get('url')})")
+
+    if citations:
+        response_text += "\n\n**Citations:**\n" + "\n".join(citations)
+        
+    return response_text
