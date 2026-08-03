@@ -5,3 +5,5 @@ pylint
 bandit
 
 pyTelegramBotAPI
+
+google-genai
