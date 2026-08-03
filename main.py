@@ -10,9 +10,6 @@ from datetime import datetime
 import logging
 from bs4 import BeautifulSoup
 
-# ==========================================
-# 1. ตั้งค่า Environment Variables & ความปลอดภัย
-# ==========================================
 PORT = int(os.environ.get("PORT", 8080))
 TELEGRAM_BOT_TOKEN = os.environ.get("TELEGRAM_BOT_TOKEN")
 OPENROUTER_API_KEY = os.environ.get("OPENROUTER_API_KEY")
@@ -32,9 +29,6 @@ handler = logging.StreamHandler()
 handler.setFormatter(SafeLogFormatter('%(asctime)s - %(levelname)s - %(message)s'))
 logger.addHandler(handler)
 
-# ==========================================
-# 2. ระบบ Web Server จำลอง (สำหรับคงสถานะ Render)
-# ==========================================
 class MyHandler(http.server.SimpleHTTPRequestHandler):
     def do_GET(self):
         self.send_response(200)
@@ -53,12 +47,9 @@ def run_server():
     with socketserver.TCPServer(("", PORT), MyHandler) as httpd:
         httpd.serve_forever()
 
-# ==========================================
-# 3. ฟังก์ชัน AI สำรอง (OpenRouter / Gemma 2 Free)
-# ==========================================
 def ask_openrouter(text):
     if not OPENROUTER_API_KEY:
-        return "❌ ขาด OPENROUTER_API_KEY"
+        return "❌ Missing OPENROUTER_API_KEY"
     try:
         response = requests.post(
             url="https://openrouter.ai/api/v1/chat/completions",
@@ -77,17 +68,14 @@ def ask_openrouter(text):
             return f"❌ OpenRouter Error ({response.status_code})"
     except Exception as e:
         logger.error(f"OpenRouter Error: {str(e)}")
-        return f"❌ ระบบ OpenRouter ขัดข้อง: {str(e)}"
+        return f"❌ OpenRouter Error: {str(e)}"
 
 def get_system_context():
     now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-    return f"[ข้อมูลระบบ: วันเวลาปัจจุบันคือ {now} น. คุณคือ iKALABot ผู้ช่วยอัจฉริยะระดับสูงที่มีความสามารถรอบด้าน]"
+    return f"[System Info: Current time is {now}. You are iKALABot, a high-level multi-functional assistant.]"
 
-# ==========================================
-# 4. ระบบ Telegram Bot (Polling + Full Multimodal Functions)
-# ==========================================
 if not TELEGRAM_BOT_TOKEN:
-    logger.error("ERROR: ไม่พบ TELEGRAM_BOT_TOKEN")
+    logger.error("ERROR: TELEGRAM_BOT_TOKEN not found")
 else:
     bot = telebot.TeleBot(TELEGRAM_BOT_TOKEN)
     gemini_client = genai.Client(api_key=GEMINI_API_KEY) if GEMINI_API_KEY else None
@@ -96,11 +84,11 @@ else:
     def send_welcome(message):
         welcome_text = (
             "🤖 **iKALABot Super Full Options**\n\n"
-            "💬 **พิมพ์ข้อความธรรมดา / URL Link:** สนทนา, ค้นหาข้อมูล, และอ่านเว็บ\n"
-            "🎙️ **ส่งข้อความเสียง (Voice):** ถอดรหัสเสียงและตอบกลับทันที\n"
-            "📸 **ส่งรูปภาพ (Vision):** วิเคราะห์ภาพถ่ายมัลติโมเดล\n"
-            "📁 **ส่งไฟล์ Script / Office / Document:** อ่านไฟล์ ตรวจสอบโค้ด จัดรูปแบบ และเพิ่มคอมเมนต์แจกแจงรายละเอียด\n"
-            "🤖 **คำสั่ง /ai หรือ /llama:** เรียกใช้ OpenRouter สำรอง"
+            "💬 **Text / URL Link:** Chat, search info, and read web pages\n"
+            "🎙️ **Voice:** Transcribe and reply automatically\n"
+            "📸 **Photo:** Multimodal image analysis\n"
+            "📁 **Document / Script:** Review, format code, and add comments\n"
+            "🤖 **Commands /ai or /llama:** Backup OpenRouter AI"
         )
         bot.reply_to(message, welcome_text)
 
@@ -108,7 +96,7 @@ else:
     def handle_openrouter_cmd(message):
         text = message.text.replace('/ai', '').replace('/llama', '').strip()
         if not text:
-            bot.reply_to(message, "กรุณาพิมพ์ข้อความต่อท้ายด้วยครับ เช่น /ai ขอโค้ดไพธอนหน่อย")
+            bot.reply_to(message, "Please provide text after command, e.g. /ai hello")
             return
         bot.send_chat_action(message.chat.id, 'typing')
         bot.reply_to(message, f"🤖 **OpenRouter (Gemma 2):**\n{ask_openrouter(text)}")
@@ -120,19 +108,19 @@ else:
         
         if "http://" in text or "https://" in text:
             try:
-                bot.reply_to(message, "🔍 กำลังดึงและอ่านเนื้อหาจาก URL Link...")
+                bot.reply_to(message, "🔍 Fetching content from URL...")
                 url_extracted = text.split()[0]
                 web_res = requests.get(url_extracted, timeout=5)
                 soup = BeautifulSoup(web_res.text, 'html.parser')
                 web_text = soup.get_text()[:3000]
-                text = f"โปรดสรุปและวิเคราะห์เนื้อหาจากลิงก์นี้:\n{web_text}"
+                text = f"Please summarize and analyze this web content:\n{web_text}"
             except Exception as e:
                 logger.warning(f"URL Read Error: {str(e)}")
 
-        prompt = f"{get_system_context()}\nคำถามจากผู้ใช้: {text}"
+        prompt = f"{get_system_context()}\nUser query: {text}"
         
         if not gemini_client:
-            bot.reply_to(message, "⚠️ ไม่พบ Gemini API Key สลับไปใช้ OpenRouter...\n\n" + ask_openrouter(text))
+            bot.reply_to(message, "⚠️ Gemini API Key missing. Switching to OpenRouter...\n\n" + ask_openrouter(text))
             return
             
         try:
@@ -143,7 +131,7 @@ else:
             bot.reply_to(message, response.text)
         except Exception as e:
             logger.error(f"Gemini Error: {str(e)}")
-            fallback_msg = f"⚠️ Gemini ขัดข้อง กำลังสลับไปใช้ OpenRouter...\n\n🤖:\n{ask_openrouter(text)}"
+            fallback_msg = f"⚠️ Gemini error. Switching to OpenRouter...\n\n🤖:\n{ask_openrouter(text)}"
             bot.reply_to(message, fallback_msg)
 
     @bot.message_handler(content_types=['voice', 'audio'])
@@ -157,24 +145,24 @@ else:
             with open(temp_audio_path, 'wb') as f:
                 f.write(downloaded_file)
             
-            bot.reply_to(message, "🎙️ กำลังให้ Gemini ฟังเสียงที่คุณพูด...")
+            bot.reply_to(message, "🎙️ Transcribing and processing voice with Gemini...")
             audio_file_ref = gemini_client.files.upload(file=temp_audio_path)
             
             response = gemini_client.models.generate_content(
                 model='gemini-3.6-flash',
                 contents=[
                     audio_file_ref, 
-                    f"{get_system_context()}\nช่วยฟังไฟล์เสียงนี้ ถอดความออกมา และตอบคำถามหรือทำตามคำสั่งในเสียงนั้น"
+                    f"{get_system_context()}\nListen to this voice file, transcribe it, and fulfill the request inside."
                 ]
             )
             
-            bot.reply_to(message, f"🗣️ **ผลลัพธ์จากเสียงพูด:**\n\n{response.text}")
+            bot.reply_to(message, f"🗣️ **Voice Transcription & Result:**\n\n{response.text}")
             
             if os.path.exists(temp_audio_path):
                 os.remove(temp_audio_path)
         except Exception as e:
             logger.error(f"Voice Error: {str(e)}")
-            bot.reply_to(message, f"❌ เกิดข้อผิดพลาดในการประมวลผลเสียง: {str(e)}")
+            bot.reply_to(message, f"❌ Voice processing error: {str(e)}")
 
     @bot.message_handler(content_types=['photo'])
     def handle_photo(message):
@@ -190,20 +178,20 @@ else:
             img_ref = gemini_client.files.upload(file=temp_img_path)
             response = gemini_client.models.generate_content(
                 model='gemini-3.6-flash',
-                contents=[img_ref, f"{get_system_context()}\nช่วยวิเคราะห์รูปภาพนี้อย่างละเอียด และอธิบายรายละเอียดต่างๆ ให้เข้าใจง่าย"]
+                contents=[img_ref, f"{get_system_context()}\nAnalyze this image in detail and explain everything clearly."]
             )
             
-            bot.reply_to(message, f"📸 **ผลการวิเคราะห์รูปภาพ:**\n\n{response.text}")
+            bot.reply_to(message, f"📸 **Image Analysis Result:**\n\n{response.text}")
             if os.path.exists(temp_img_path):
                 os.remove(temp_img_path)
         except Exception as e:
             logger.error(f"Photo Error: {str(e)}")
-            bot.reply_to(message, f"❌ ไม่สามารถอ่านรูปภาพได้: {str(e)}")
+            bot.reply_to(message, f"❌ Cannot read image: {str(e)}")
 
     @bot.message_handler(content_types=['document'])
     def handle_document(message):
         file_name = message.document.file_name
-        bot.reply_to(message, f"📁 กำลังตรวจสอบและอ่านไฟล์: {file_name}")
+        bot.reply_to(message, f"📁 Processing file: {file_name}")
         try:
             file_info = bot.get_file(message.document.file_id)
             downloaded_file = bot.download_file(file_info.file_path)
@@ -212,18 +200,18 @@ else:
                 code_content = downloaded_file.decode('utf-8')[:6000]
                 prompt = (
                     f"{get_system_context()}\n"
-                    f"นี่คือเนื้อหาจากไฟล์ Script/Document ชื่อ '{file_name}':\n\n{code_content}\n\n"
-                    "คำสั่ง: \n"
-                    "1. ช่วยตรวจสอบและจัดการปัญหา Code Script (แก้บั๊ก/หาข้อผิดพลาด)\n"
-                    "2. จัดบรรทัดโค้ด (Code Formatting) ให้สวยงามอ่านง่าย\n"
-                    "3. เพิ่ม Comment โพสต์/อธิบายแจกแจงรายละเอียดการทำงานในแต่ละส่วนของโค้ดให้ครบถ้วนชัดเจน"
+                    f"Content from script/document '{file_name}':\n\n{code_content}\n\n"
+                    "Tasks:\n"
+                    "1. Debug and check for errors\n"
+                    "2. Format code cleanly\n"
+                    "3. Add clear comments detailing each section"
                 )
                 
                 response = gemini_client.models.generate_content(
                     model='gemini-3.6-flash',
                     contents=prompt
                 )
-                bot.reply_to(message, f"🛠️ **ผลการวิเคราะห์ จัดรูปแบบ Script และเพิ่ม Comment:**\n\n{response.text}")
+                bot.reply_to(message, f"🛠️ **Script Analysis & Formatting Result:**\n\n{response.text}")
             else:
                 temp_doc_path = f"temp_{file_name}"
                 with open(temp_doc_path, 'wb') as f:
@@ -232,23 +220,23 @@ else:
                 doc_ref = gemini_client.files.upload(file=temp_doc_path)
                 response = gemini_client.models.generate_content(
                     model='gemini-3.6-flash',
-                    contents=[doc_ref, f"{get_system_context()}\nช่วยอ่าน สรุปเนื้อหา และแจกแจงรายละเอียดสำคัญจากไฟล์ Office/Document นี้ให้หน่อยครับ"]
+                    contents=[doc_ref, f"{get_system_context()}\nRead, summarize, and explain key details from this document."]
                 )
-                bot.reply_to(message, f"📄 **ผลการอ่านไฟล์ {file_name}:**\n\n{response.text}")
+                bot.reply_to(message, f"📄 **Document Summary ({file_name}):**\n\n{response.text}")
                 
                 if os.path.exists(temp_doc_path):
                     os.remove(temp_doc_path)
                     
         except Exception as e:
             logger.error(f"Document Error: {str(e)}")
-            bot.reply_to(message, f"❌ เกิดข้อผิดพลาดในการอ่านไฟล์: {str(e)}")
+            bot.reply_to(message, f"❌ File processing error: {str(e)}")
 
     if __name__ == "__main__":
         threading.Thread(target=run_server, daemon=True).start()
-        logger.info("🔄 กำลังล้าง Webhook เก่า และเริ่มกระบวนการ Polling...")
+        logger.info("Removing old webhook and connecting to Telegram...")
         try:
             bot.remove_webhook()
         except Exception:
             pass
-        logger.info("✅ Telegram Bot (Super Full Options) กำลังทำงาน...")
-        bot.infinity_polling(skip_pending=True)
+        logger.info("Telegram Bot is starting polling...")
+        bot.infinity_polling(timeout=60, long_polling_timeout=60)
