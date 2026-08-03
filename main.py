@@ -52,13 +52,12 @@ def clean_text_for_bot(text):
     cleaned = text.replace('*', '').replace('#', '').replace('_', '').replace('`', '')
     return cleaned.strip()
 
-# เก็บประวัติการสนทนาแยกตาม chat_id (Memory)
 chat_histories = {}
 
 def get_system_context(chat_id):
     now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     history = chat_histories.get(chat_id, [])
-    history_str = "\n".join([f"{item['role']}: {item['text']}" for item in history[-6:]]) # จำ 6 ข้อย้อนหลัง
+    history_str = "\n".join([f"{item['role']}: {item['text']}" for item in history[-6:]])
     
     return (
         f"[System Info: Current time is {now}. You are iKALABot. "
@@ -82,8 +81,8 @@ else:
     @bot.message_handler(commands=['start', 'help'])
     def send_welcome(message):
         chat_id = message.chat.id
-        chat_histories[chat_id] = [] # ล้างความจำเมื่อเริ่มใหม่
-        welcome_text = "iKALABot Memory Enabled\n\nSend text or voice messages. I will remember our conversation."
+        chat_histories[chat_id] = []
+        welcome_text = "iKALABot Ready (Memory & Clean Text Enabled)"
         bot.reply_to(message, welcome_text)
 
     @bot.message_handler(content_types=['text'])
@@ -97,7 +96,7 @@ else:
         
         try:
             response = gemini_client.models.generate_content(
-                model='gemini-3.6-flash',
+                model='gemini-2.5-flash',
                 contents=prompt,
             )
             final_reply = clean_text_for_bot(response.text)
@@ -105,7 +104,8 @@ else:
             bot.reply_to(message, final_reply)
         except Exception as e:
             logger.error(f"Gemini Error: {str(e)}")
-            bot.reply_to(message, "Error processing request")
+            error_msg = "Quota exceeded or API error. Please try again later." if "429" in str(e) else "Error processing request"
+            bot.reply_to(message, error_msg)
 
     @bot.message_handler(content_types=['voice', 'audio'])
     def handle_voice(message):
@@ -122,7 +122,7 @@ else:
             audio_file_ref = gemini_client.files.upload(file=temp_audio_path)
             
             response = gemini_client.models.generate_content(
-                model='gemini-3.6-flash',
+                model='gemini-2.5-flash',
                 contents=[
                     audio_file_ref, 
                     f"{get_system_context(chat_id)}\nListen to this voice message, consider history, and provide ONLY the direct answer in plain text."
@@ -150,7 +150,8 @@ else:
 
         except Exception as e:
             logger.error(f"Voice Error: {str(e)}")
-            bot.reply_to(message, "Voice processing error")
+            error_msg = "Voice quota exceeded (429)" if "429" in str(e) else f"Voice processing error: {str(e)}"
+            bot.reply_to(message, error_msg)
 
     if __name__ == "__main__":
         threading.Thread(target=run_server, daemon=True).start()
@@ -160,4 +161,4 @@ else:
         except Exception:
             pass
         logger.info("Telegram Bot is starting polling...")
-        bot.infinity_polling(timeout=60, long_polling_timeout=60)
+        bot.infinity_polling(timeout=60, long_polling_timeout=60, skip_pending=True)
