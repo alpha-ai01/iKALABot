@@ -10,7 +10,6 @@ from datetime import datetime
 import logging
 from bs4 import BeautifulSoup
 from gtts import gTTS
-import re
 
 PORT = int(os.environ.get("PORT", 8080))
 TELEGRAM_BOT_TOKEN = os.environ.get("TELEGRAM_BOT_TOKEN")
@@ -50,13 +49,29 @@ def run_server():
         httpd.serve_forever()
 
 def clean_text_for_bot(text):
-    # ลบเครื่องหมายดอกจัน (*) และเครื่องหมาย Markdown ส่วนเกินออก
     cleaned = text.replace('*', '').replace('#', '').replace('_', '').replace('`', '')
     return cleaned.strip()
 
-def get_system_context():
+# เก็บประวัติการสนทนาแยกตาม chat_id (Memory)
+chat_histories = {}
+
+def get_system_context(chat_id):
     now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-    return f"[System Info: Current time is {now}. You are iKALABot. STRICT RULE: Do NOT use any markdown symbols like asterisks (*), hashes (#), underscores (_), or backticks (`) in your response. Write in plain text only.]"
+    history = chat_histories.get(chat_id, [])
+    history_str = "\n".join([f"{item['role']}: {item['text']}" for item in history[-6:]]) # จำ 6 ข้อย้อนหลัง
+    
+    return (
+        f"[System Info: Current time is {now}. You are iKALABot. "
+        f"STRICT RULE: Do NOT use markdown symbols like asterisks (*), hashes (#), underscores (_), or backticks (`). Plain text only.]\n\n"
+        f"Conversation History:\n{history_str}\n"
+    )
+
+def add_to_history(chat_id, role, text):
+    if chat_id not in chat_histories:
+        chat_histories[chat_id] = []
+    chat_histories[chat_id].append({"role": role, "text": text})
+    if len(chat_histories[chat_id]) > 20:
+        chat_histories[chat_id].pop(0)
 
 if not TELEGRAM_BOT_TOKEN:
     logger.error("ERROR: TELEGRAM_BOT_TOKEN not found")
@@ -66,21 +81,19 @@ else:
 
     @bot.message_handler(commands=['start', 'help'])
     def send_welcome(message):
-        welcome_text = (
-            "iKALABot Super Full Options\n\n"
-            "Text / URL Link: Chat, search info, and read web pages\n"
-            "Voice: Direct voice response\n"
-            "Photo: Multimodal image analysis\n"
-            "Document / Script: Review, format code, and add comments"
-        )
+        chat_id = message.chat.id
+        chat_histories[chat_id] = [] # ล้างความจำเมื่อเริ่มใหม่
+        welcome_text = "iKALABot Memory Enabled\n\nSend text or voice messages. I will remember our conversation."
         bot.reply_to(message, welcome_text)
 
     @bot.message_handler(content_types=['text'])
     def handle_text(message):
+        chat_id = message.chat.id
         text = message.text
         bot.send_chat_action(message.chat.id, 'typing')
         
-        prompt = f"{get_system_context()}\nUser query: {text}"
+        add_to_history(chat_id, "User", text)
+        prompt = f"{get_system_context(chat_id)}\nUser query: {text}"
         
         try:
             response = gemini_client.models.generate_content(
@@ -88,13 +101,15 @@ else:
                 contents=prompt,
             )
             final_reply = clean_text_for_bot(response.text)
+            add_to_history(chat_id, "Model", final_reply)
             bot.reply_to(message, final_reply)
         except Exception as e:
             logger.error(f"Gemini Error: {str(e)}")
-            bot.reply_to(message, "❌ Error processing request")
+            bot.reply_to(message, "Error processing request")
 
     @bot.message_handler(content_types=['voice', 'audio'])
     def handle_voice(message):
+        chat_id = message.chat.id
         bot.send_chat_action(message.chat.id, 'record_audio')
         try:
             file_info = bot.get_file(message.voice.file_id if message.voice else message.audio.file_id)
@@ -110,16 +125,16 @@ else:
                 model='gemini-3.6-flash',
                 contents=[
                     audio_file_ref, 
-                    f"{get_system_context()}\nListen to this voice message and provide ONLY the direct answer in plain text without any symbols."
+                    f"{get_system_context(chat_id)}\nListen to this voice message, consider history, and provide ONLY the direct answer in plain text."
                 ]
             )
             
             reply_text = clean_text_for_bot(response.text)
+            add_to_history(chat_id, "User", "[Voice Message]")
+            add_to_history(chat_id, "Model", reply_text)
             
-            # ส่งข้อความแบบไร้เครื่องหมายพิเศษ
             bot.reply_to(message, reply_text)
 
-            # แปลงเสียงพูดจากข้อความที่สะอาดไม่มีเครื่องหมาย
             bot.send_chat_action(message.chat.id, 'record_audio')
             tts = gTTS(text=reply_text, lang='th')
             reply_audio_path = "reply_voice.ogg"
@@ -135,31 +150,7 @@ else:
 
         except Exception as e:
             logger.error(f"Voice Error: {str(e)}")
-            bot.reply_to(message, f"❌ Voice processing error: {str(e)}")
-
-    @bot.message_handler(content_types=['photo'])
-    def handle_photo(message):
-        bot.send_chat_action(message.chat.id, 'typing')
-        try:
-            file_info = bot.get_file(message.photo[-1].file_id)
-            downloaded_file = bot.download_file(file_info.file_path)
-            
-            temp_img_path = "temp_image.jpg"
-            with open(temp_img_path, 'wb') as f:
-                f.write(downloaded_file)
-                
-            img_ref = gemini_client.files.upload(file=temp_img_path)
-            response = gemini_client.models.generate_content(
-                model='gemini-3.6-flash',
-                contents=[img_ref, f"{get_system_context()}\nAnalyze this image in plain text without any markdown symbols."]
-            )
-            
-            bot.reply_to(message, clean_text_for_bot(response.text))
-            if os.path.exists(temp_img_path):
-                os.remove(temp_img_path)
-        except Exception as e:
-            logger.error(f"Photo Error: {str(e)}")
-            bot.reply_to(message, f"❌ Cannot read image: {str(e)}")
+            bot.reply_to(message, "Voice processing error")
 
     if __name__ == "__main__":
         threading.Thread(target=run_server, daemon=True).start()
