@@ -9,6 +9,7 @@ import json
 from datetime import datetime
 import logging
 from bs4 import BeautifulSoup
+from gtts import gTTS
 
 PORT = int(os.environ.get("PORT", 8080))
 TELEGRAM_BOT_TOKEN = os.environ.get("TELEGRAM_BOT_TOKEN")
@@ -85,7 +86,7 @@ else:
         welcome_text = (
             "🤖 **iKALABot Super Full Options**\n\n"
             "💬 **Text / URL Link:** Chat, search info, and read web pages\n"
-            "🎙️ **Voice:** Transcribe and reply automatically\n"
+            "🎙️ **Voice:** Transcribe, reply with text, and send back a Voice Message!\n"
             "📸 **Photo:** Multimodal image analysis\n"
             "📁 **Document / Script:** Review, format code, and add comments\n"
             "🤖 **Commands /ai or /llama:** Backup OpenRouter AI"
@@ -145,21 +146,35 @@ else:
             with open(temp_audio_path, 'wb') as f:
                 f.write(downloaded_file)
             
-            bot.reply_to(message, "🎙️ Transcribing and processing voice with Gemini...")
+            bot.reply_to(message, "🎙️ Processing your voice message...")
             audio_file_ref = gemini_client.files.upload(file=temp_audio_path)
             
             response = gemini_client.models.generate_content(
                 model='gemini-3.6-flash',
                 contents=[
                     audio_file_ref, 
-                    f"{get_system_context()}\nListen to this voice file, transcribe it, and fulfill the request inside."
+                    f"{get_system_context()}\nListen to this voice message, transcribe it, and provide a direct, concise response to the user's request."
                 ]
             )
             
-            bot.reply_to(message, f"🗣️ **Voice Transcription & Result:**\n\n{response.text}")
-            
+            reply_text = response.text
+            bot.reply_to(message, f"🗣️ **Transcription & Answer:**\n\n{reply_text}")
+
+            # แปลงข้อความตอบกลับเป็นไฟล์เสียง (Voice Message) ส่งกลับหาผู้ใช้
+            bot.send_chat_action(message.chat.id, 'record_audio')
+            tts = gTTS(text=reply_text, lang='th')
+            reply_audio_path = "reply_voice.ogg"
+            tts.save(reply_audio_path)
+
+            with open(reply_audio_path, 'rb') as audio:
+                bot.send_voice(message.chat.id, audio, caption="🔊 ข้อความเสียงตอบกลับจากบอท")
+
+            # ลบไฟล์ชั่วคราว
             if os.path.exists(temp_audio_path):
                 os.remove(temp_audio_path)
+            if os.path.exists(reply_audio_path):
+                os.remove(reply_audio_path)
+
         except Exception as e:
             logger.error(f"Voice Error: {str(e)}")
             bot.reply_to(message, f"❌ Voice processing error: {str(e)}")
