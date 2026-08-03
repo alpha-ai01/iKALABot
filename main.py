@@ -24,7 +24,7 @@ class MyHandler(http.server.SimpleHTTPRequestHandler):
         self.send_response(200)
         self.send_header("Content-type", "text/plain; charset=utf-8")
         self.end_headers()
-        self.wfile.write(b"iKALABot is running with Gemini 3.6 Flash & Polling Mode!")
+        self.wfile.write(b"iKALABot is running with Real Audio Multimodal!")
     def do_HEAD(self):
         self.send_response(200)
         self.end_headers()
@@ -62,15 +62,12 @@ def ask_openrouter(text):
     except Exception as e:
         return f"❌ ระบบ OpenRouter ขัดข้อง: {str(e)}"
 
-# ==========================================
-# 4. ฟังก์ชันเสริมสำหรับดึงบริบทเวลาปัจจุบัน
-# ==========================================
 def get_system_context():
     now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     return f"[ข้อมูลระบบ: วันเวลาปัจจุบันคือ {now} น.]"
 
 # ==========================================
-# 5. ระบบ Telegram Bot (Polling + Multimodal Handlers)
+# 4. ระบบ Telegram Bot (Polling + Real Audio / Multimodal)
 # ==========================================
 if not TELEGRAM_BOT_TOKEN:
     print("❌ ERROR: ไม่พบ TELEGRAM_BOT_TOKEN")
@@ -81,16 +78,14 @@ else:
     @bot.message_handler(commands=['start', 'help'])
     def send_welcome(message):
         welcome_text = (
-            "🤖 **iKALABot (Gemini 3.6 Flash Engine)**\n\n"
-            "💬 **พิมพ์ข้อความธรรมดา:** สนทนา / ค้นหาข้อมูลข่าวสารปัจจุบัน\n"
-            "📁 **ส่งไฟล์ Script / Document:** บอทช่วยอ่าน ตรวจสอบ และจัดรูปแบบโค้ด\n"
-            "📸 **ส่งรูปภาพ:** บอทช่วยวิเคราะห์ภาพผ่านระบบมัลติโมเดล\n"
-            "🎙️ **ส่งข้อความเสียง:** รองรับการบันทึกสถานะข้อความเสียง\n"
-            "🤖 **คำสั่ง /ai หรือ /llama:** เรียกใช้ OpenRouter สำรอง"
+            "🤖 **iKALABot (Gemini 3.6 Flash + Real Audio)**\n\n"
+            "💬 **พิมพ์ข้อความธรรมดา:** สนทนา / ค้นหาข้อมูล\n"
+            "🎙️ **ส่งข้อความเสียง:** บอทจะฟังเสียง แปลงคำพูด และตอบกลับทันที!\n"
+            "📸 **ส่งรูปภาพ:** บอทช่วยวิเคราะห์ภาพ\n"
+            "📁 **ส่งไฟล์ Script:** บอทช่วยตรวจโค้ดและจัดรูปแบบให้"
         )
         bot.reply_to(message, welcome_text)
 
-    # คำสั่งเรียก OpenRouter สำรอง
     @bot.message_handler(commands=['ai', 'llama'])
     def handle_openrouter_cmd(message):
         text = message.text.replace('/ai', '').replace('/llama', '').strip()
@@ -100,12 +95,11 @@ else:
         bot.send_chat_action(message.chat.id, 'typing')
         bot.reply_to(message, f"🤖 **OpenRouter (Gemma 2):**\n{ask_openrouter(text)}")
 
-    # 5.1 โต้ตอบข้อความแชทปกติ (รองรับ Gemini 3.6 Flash และบริบทเวลาปัจจุบัน)
+    # 4.1 โต้ตอบข้อความแชทปกติ
     @bot.message_handler(content_types=['text'])
     def handle_text(message):
         text = message.text
         bot.send_chat_action(message.chat.id, 'typing')
-        
         prompt = f"{get_system_context()}\nคำถามจากผู้ใช้: {text}"
         
         if not gemini_client:
@@ -113,7 +107,6 @@ else:
             return
             
         try:
-            # ใช้ Gemini 3.6 Flash ตามที่กำหนด
             response = gemini_client.models.generate_content(
                 model='gemini-3.6-flash',
                 contents=prompt,
@@ -123,17 +116,49 @@ else:
             fallback_msg = f"⚠️ Gemini ขัดข้อง กำลังสลับไปใช้ OpenRouter...\n\n🤖:\n{ask_openrouter(text)}"
             bot.reply_to(message, fallback_msg)
 
-    # 5.2 โต้ตอบข้อความเสียง (Voice/Audio)
+    # 4.2 โต้ตอบข้อความเสียง (Real Audio Processing ผ่าน Gemini)
     @bot.message_handler(content_types=['voice', 'audio'])
     def handle_voice(message):
-        bot.reply_to(message, "🎙️ ได้รับข้อความเสียงแล้ว ระบบกำลังบันทึกและเตรียมถอดรหัสเสียงเข้าโมเดล AI...")
+        bot.send_chat_action(message.chat.id, 'record_audio')
+        try:
+            # ดึงข้อมูลไฟล์เสียงจาก Telegram
+            file_info = bot.get_file(message.voice.file_id if message.voice else message.audio.file_id)
+            downloaded_file = bot.download_file(file_info.file_path)
+            
+            # บันทึกไฟล์เสียงชั่วคราวเพื่อส่งให้ Gemini ประมวลผล
+            temp_audio_path = "temp_voice.ogg"
+            with open(temp_audio_path, 'wb') as f:
+                f.write(downloaded_file)
+            
+            bot.reply_to(message, "🎙️ กำลังอัปโหลดและให้ Gemini ฟังเสียงที่คุณพูด...")
+            
+            # อัปโหลดไฟล์เสียงเข้าไปยัง Gemini File API
+            audio_file_ref = gemini_client.files.upload(file=temp_audio_path)
+            
+            # สั่งให้ Gemini ถอดรหัสและตอบคำถามจากเสียง
+            response = gemini_client.models.generate_content(
+                model='gemini-3.6-flash',
+                contents=[
+                    audio_file_ref, 
+                    f"{get_system_context()}\nช่วยฟังไฟล์เสียงนี้ ถอดความออกมาเป็นข้อความ และตอบคำถามหรือทำตามคำสั่งในเสียงนั้นให้หน่อยครับ"
+                ]
+            )
+            
+            bot.reply_to(message, f"🗣️ **ผลลัพธ์จากเสียงที่คุณพูด:**\n\n{response.text}")
+            
+            # ลบไฟล์เสียงชั่วคราวทิ้ง
+            if os.path.exists(temp_audio_path):
+                os.remove(temp_audio_path)
+                
+        except Exception as e:
+            bot.reply_to(message, f"❌ เกิดข้อผิดพลาดในการประมวลผลเสียง: {str(e)}")
 
-    # 5.3 อ่านรูปภาพ (Vision)
+    # 4.3 อ่านรูปภาพ (Vision)
     @bot.message_handler(content_types=['photo'])
     def handle_photo(message):
         bot.reply_to(message, "📸 ได้รับรูปภาพแล้ว กำลังประมวลผลวิเคราะห์ภาพผ่านระบบ Multimodal...")
 
-    # 5.4 อ่านไฟล์เอกสารและ Script ทุกนามสกุล (.py, .js, .txt, .docx, .pdf ฯลฯ)
+    # 4.4 อ่านไฟล์เอกสารและ Script
     @bot.message_handler(content_types=['document'])
     def handle_document(message):
         file_name = message.document.file_name
@@ -142,7 +167,6 @@ else:
             file_info = bot.get_file(message.document.file_id)
             downloaded_file = bot.download_file(file_info.file_path)
             
-            # ถ้าเป็นไฟล์โค้ดหรือข้อความ สามารถดึงเนื้อหามาให้ AI ช่วยจัดบรรทัด / ตรวจสอบบั๊กได้ทันที
             if file_name.endswith(('.py', '.js', '.txt', '.json', '.html', '.css', '.cpp', '.h')):
                 code_content = downloaded_file.decode('utf-8')[:4000]
                 prompt = f"{get_system_context()}\nช่วยตรวจสอบโค้ด จัดบรรทัดโค้ด (Code Formatting) และวิเคราะห์ปัญหาในไฟล์นี้ให้หน่อยครับ:\n\n{code_content}"
@@ -153,16 +177,13 @@ else:
                 )
                 bot.reply_to(message, f"🛠️ **ผลการตรวจสอบและจัดรูปแบบ Code Script:**\n\n{response.text}")
             else:
-                bot.reply_to(message, f"📥 ดาวน์โหลดไฟล์ {file_name} เรียบร้อยแล้ว พร้อมส่งข้อมูลเข้าสู่ระบบประมวลผลเอกสาร")
+                bot.reply_to(message, f"📥 ดาวน์โหลดไฟล์ {file_name} เรียบร้อยแล้ว")
         except Exception as e:
             bot.reply_to(message, f"❌ เกิดข้อผิดพลาดในการอ่านไฟล์: {str(e)}")
 
     if __name__ == "__main__":
-        # รันเว็บเซิร์ฟเวอร์จำลองเพื่อคงสถานะแอปบน Render
         threading.Thread(target=run_server, daemon=True).start()
-        
         print("🔄 กำลังล้าง Webhook เก่า และเริ่มกระบวนการ Polling...")
         bot.remove_webhook()
-        
-        print("✅ Telegram Bot (Gemini 3.6 Flash + Polling Mode) กำลังทำงาน...")
+        print("✅ Telegram Bot (Real Audio + Gemini 3.6 Flash) กำลังทำงาน...")
         bot.infinity_polling()
