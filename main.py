@@ -3,25 +3,27 @@ import threading
 import http.server
 import socketserver
 import telebot
+from google import genai
 import requests
 import json
 
 # ==========================================
-# 1. ตั้งค่าพื้นฐาน (ดึงค่าจาก Environment Variables)
+# 1. ดึงค่าตัวแปร (Environment Variables)
 # ==========================================
 PORT = int(os.environ.get("PORT", 8080))
 TELEGRAM_BOT_TOKEN = os.environ.get("TELEGRAM_BOT_TOKEN")
 OPENROUTER_API_KEY = os.environ.get("OPENROUTER_API_KEY")
+GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY")
 
 # ==========================================
-# 2. ระบบ Web Server จำลอง
+# 2. ระบบ Web Server (ป้องกัน Render ปิดแอป)
 # ==========================================
 class MyHandler(http.server.SimpleHTTPRequestHandler):
     def do_GET(self):
         self.send_response(200)
         self.send_header("Content-type", "text/plain; charset=utf-8")
         self.end_headers()
-        self.wfile.write(b"iKALABot is running with OpenRouter!")
+        self.wfile.write(b"iKALABot Dual AI is running!")
     def do_HEAD(self):
         self.send_response(200)
         self.end_headers()
@@ -35,52 +37,81 @@ def run_server():
         httpd.serve_forever()
 
 # ==========================================
-# 3. ระบบ Telegram Bot + OpenRouter AI
+# 3. ฟังก์ชันสำหรับยิง API ไปหา OpenRouter
 # ==========================================
-if not TELEGRAM_BOT_TOKEN or not OPENROUTER_API_KEY:
-    print("❌ ERROR: ไม่พบ TELEGRAM_BOT_TOKEN หรือ OPENROUTER_API_KEY")
+def ask_openrouter(text):
+    if not OPENROUTER_API_KEY:
+        return "❌ ขาด OPENROUTER_API_KEY"
+    try:
+        response = requests.post(
+            url="https://openrouter.ai/api/v1/chat/completions",
+            headers={
+                "Authorization": f"Bearer {OPENROUTER_API_KEY}",
+                "Content-Type": "application/json"
+            },
+            data=json.dumps({
+                "model": "meta-llama/llama-3.1-8b-instruct",
+                "messages": [{"role": "user", "content": text}]
+            })
+        )
+        if response.status_code == 200:
+            return response.json()['choices'][0]['message']['content']
+        else:
+            return f"❌ OpenRouter Error ({response.status_code}): {response.text}"
+    except Exception as e:
+        return f"❌ ระบบ OpenRouter ขัดข้อง: {str(e)}"
+
+# ==========================================
+# 4. ระบบ Telegram Bot
+# ==========================================
+if not TELEGRAM_BOT_TOKEN:
+    print("❌ ERROR: ไม่พบ TELEGRAM_BOT_TOKEN")
 else:
     bot = telebot.TeleBot(TELEGRAM_BOT_TOKEN)
+    gemini_client = genai.Client(api_key=GEMINI_API_KEY) if GEMINI_API_KEY else None
 
     @bot.message_handler(commands=['start', 'help'])
     def send_welcome(message):
-        welcome_text = "สวัสดีครับ! ผมคือ iKALABot ตอนนี้ผมใช้สมองจาก OpenRouter (Llama 3.1) พิมพ์คำถามมาได้เลยครับ!"
-        bot.reply_to(message, welcome_text)
+        welcome_text = (
+            "สวัสดีครับ! ผมคือ iKALABot (Dual AI)\n\n"
+            "💬 พิมพ์ข้อความปกติ = ใช้ **Gemini 3.6 Flash**\n"
+            "🦙 พิมพ์ /llama <ข้อความ> = ใช้ **Llama 3.1**"
+        )
+        bot.reply_to(message, welcome_text, parse_mode="Markdown")
 
+    # บังคับใช้ OpenRouter
+    @bot.message_handler(commands=['llama'])
+    def handle_llama(message):
+        text = message.text.replace('/llama', '').strip()
+        if not text:
+            bot.reply_to(message, "กรุณาพิมพ์คำถามต่อท้าย /llama ด้วยครับ เช่น `/llama สวัสดี`", parse_mode="Markdown")
+            return
+        bot.send_chat_action(message.chat.id, 'typing')
+        bot.reply_to(message, f"🦙 **Llama 3.1:**\n{ask_openrouter(text)}", parse_mode="Markdown")
+
+    # ค่าเริ่มต้นใช้ Gemini (มี Fallback ไป OpenRouter)
     @bot.message_handler(func=lambda message: True)
-    def chat_with_ai(message):
+    def chat_with_gemini(message):
+        bot.send_chat_action(message.chat.id, 'typing')
+        if not gemini_client:
+            bot.reply_to(message, "⚠️ ไม่พบ Gemini API Key สลับไปใช้ OpenRouter แทน...\n\n" + ask_openrouter(message.text))
+            return
+            
         try:
-            bot.send_chat_action(message.chat.id, 'typing')
-            
-            response = requests.post(
-                url="https://openrouter.ai/api/v1/chat/completions",
-                headers={
-                    "Authorization": f"Bearer {OPENROUTER_API_KEY}",
-                    "Content-Type": "application/json"
-                },
-                data=json.dumps({
-                    "model": "meta-llama/llama-3.1-8b-instruct:free",
-                    "messages": [{"role": "user", "content": message.text}]
-                })
+            response = gemini_client.models.generate_content(
+                model='gemini-3.6-flash',
+                contents=message.text,
             )
-            
-            if response.status_code == 200:
-                result = response.json()
-                reply_text = result['choices'][0]['message']['content']
-                bot.reply_to(message, reply_text)
-            else:
-                error_msg = f"❌ OpenRouter Error ({response.status_code}): {response.text}"
-                bot.reply_to(message, error_msg)
-                
+            bot.reply_to(message, f"✨ **Gemini:**\n{response.text}", parse_mode="Markdown")
         except Exception as e:
-            bot.reply_to(message, f"❌ เกิดข้อผิดพลาดของระบบ: {str(e)}")
+            fallback_msg = f"⚠️ Gemini ขัดข้อง ({str(e)})\nกำลังสลับไปใช้ OpenRouter แทน...\n\n🦙 **Llama 3.1:**\n{ask_openrouter(message.text)}"
+            bot.reply_to(message, fallback_msg, parse_mode="Markdown")
 
     if __name__ == "__main__":
         threading.Thread(target=run_server, daemon=True).start()
         
-        # --- ลบ Webhook เก่าที่ค้างอยู่ตรงนี้ ---
-        print("🔄 กำลังลบ Webhook เก่าที่ค้างอยู่...")
+        print("🔄 กำลังล้าง Webhook เก่า...")
         bot.remove_webhook()
         
-        print("✅ Telegram Bot (OpenRouter Mode) กำลังทำงาน...")
+        print("✅ Telegram Bot (Dual AI Mode) กำลังทำงาน...")
         bot.infinity_polling()
