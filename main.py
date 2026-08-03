@@ -16,7 +16,7 @@ OPENROUTER_API_KEY = os.environ.get("OPENROUTER_API_KEY")
 GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY")
 
 # ==========================================
-# 2. ระบบ Web Server (ป้องกัน Render ปิดแอป)
+# 2. ระบบ Web Server
 # ==========================================
 class MyHandler(http.server.SimpleHTTPRequestHandler):
     def do_GET(self):
@@ -37,7 +37,7 @@ def run_server():
         httpd.serve_forever()
 
 # ==========================================
-# 3. ฟังก์ชันสำหรับยิง API ไปหา OpenRouter
+# 3. ฟังก์ชันสำหรับยิง API ไปหา OpenRouter (Gemma 2 - 100% Free)
 # ==========================================
 def ask_openrouter(text):
     if not OPENROUTER_API_KEY:
@@ -50,7 +50,7 @@ def ask_openrouter(text):
                 "Content-Type": "application/json"
             },
             data=json.dumps({
-                "model": "meta-llama/llama-3.1-8b-instruct",
+                "model": "google/gemma-2-9b-it:free",
                 "messages": [{"role": "user", "content": text}]
             })
         )
@@ -74,22 +74,22 @@ else:
     def send_welcome(message):
         welcome_text = (
             "สวัสดีครับ! ผมคือ iKALABot (Dual AI)\n\n"
-            "💬 พิมพ์ข้อความปกติ = ใช้ **Gemini 3.6 Flash**\n"
-            "🦙 พิมพ์ /llama <ข้อความ> = ใช้ **Llama 3.1**"
+            "💬 พิมพ์ข้อความปกติ = ใช้ Gemini 3.6 Flash\n"
+            "🤖 พิมพ์ /ai ตามด้วยข้อความ = ใช้ OpenRouter (Gemma 2 9B ฟรี)"
         )
-        bot.reply_to(message, welcome_text, parse_mode="Markdown")
+        bot.reply_to(message, welcome_text)
 
-    # บังคับใช้ OpenRouter
-    @bot.message_handler(commands=['llama'])
-    def handle_llama(message):
-        text = message.text.replace('/llama', '').strip()
+    # ใช้คำสั่ง /ai หรือ /llama เพื่อใช้งานโมเดลรอง
+    @bot.message_handler(commands=['ai', 'llama'])
+    def handle_openrouter(message):
+        text = message.text.replace('/ai', '').replace('/llama', '').strip()
         if not text:
-            bot.reply_to(message, "กรุณาพิมพ์คำถามต่อท้าย /llama ด้วยครับ เช่น `/llama สวัสดี`", parse_mode="Markdown")
+            bot.reply_to(message, "กรุณาพิมพ์คำถามต่อท้ายด้วยครับ เช่น /ai สวัสดี")
             return
         bot.send_chat_action(message.chat.id, 'typing')
-        bot.reply_to(message, f"🦙 **Llama 3.1:**\n{ask_openrouter(text)}", parse_mode="Markdown")
+        # เอา parse_mode ออกเพื่อแก้ปัญหาบั๊กตัวอักษรพิเศษ
+        bot.reply_to(message, f"🤖 OpenRouter (Gemma 2):\n{ask_openrouter(text)}")
 
-    # ค่าเริ่มต้นใช้ Gemini (มี Fallback ไป OpenRouter)
     @bot.message_handler(func=lambda message: True)
     def chat_with_gemini(message):
         bot.send_chat_action(message.chat.id, 'typing')
@@ -102,16 +102,16 @@ else:
                 model='gemini-3.6-flash',
                 contents=message.text,
             )
-            bot.reply_to(message, f"✨ **Gemini:**\n{response.text}", parse_mode="Markdown")
+            # เอา parse_mode ออกเพื่อแก้ Error 400 (Can't parse entities)
+            bot.reply_to(message, f"✨ Gemini:\n{response.text}")
+            
         except Exception as e:
-            fallback_msg = f"⚠️ Gemini ขัดข้อง ({str(e)})\nกำลังสลับไปใช้ OpenRouter แทน...\n\n🦙 **Llama 3.1:**\n{ask_openrouter(message.text)}"
-            bot.reply_to(message, fallback_msg, parse_mode="Markdown")
+            fallback_msg = f"⚠️ Gemini ขัดข้อง ({str(e)})\nกำลังสลับไปใช้ OpenRouter แทน...\n\n🤖 OpenRouter:\n{ask_openrouter(message.text)}"
+            bot.reply_to(message, fallback_msg)
 
     if __name__ == "__main__":
         threading.Thread(target=run_server, daemon=True).start()
-        
         print("🔄 กำลังล้าง Webhook เก่า...")
         bot.remove_webhook()
-        
         print("✅ Telegram Bot (Dual AI Mode) กำลังทำงาน...")
         bot.infinity_polling()
