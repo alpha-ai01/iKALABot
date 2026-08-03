@@ -18,7 +18,6 @@ TELEGRAM_BOT_TOKEN = os.environ.get("TELEGRAM_BOT_TOKEN")
 OPENROUTER_API_KEY = os.environ.get("OPENROUTER_API_KEY")
 GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY")
 
-# ระบบซ่อน API Key ไม่ให้หลุดไปใน Log (Safe Logging)
 class SafeLogFormatter(logging.Formatter):
     def format(self, record):
         log_msg = super().format(record)
@@ -80,7 +79,6 @@ def ask_openrouter(text):
         logger.error(f"OpenRouter Error: {str(e)}")
         return f"❌ ระบบ OpenRouter ขัดข้อง: {str(e)}"
 
-# ฟังก์ชันดึงวันและเวลาปัจจุบัน พร้อมให้บอทรู้ข่าวสาร
 def get_system_context():
     now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     return f"[ข้อมูลระบบ: วันเวลาปัจจุบันคือ {now} น. คุณคือ iKALABot ผู้ช่วยอัจฉริยะระดับสูงที่มีความสามารถรอบด้าน]"
@@ -106,7 +104,6 @@ else:
         )
         bot.reply_to(message, welcome_text)
 
-    # คำสั่งเรียก OpenRouter สำรอง
     @bot.message_handler(commands=['ai', 'llama'])
     def handle_openrouter_cmd(message):
         text = message.text.replace('/ai', '').replace('/llama', '').strip()
@@ -116,17 +113,15 @@ else:
         bot.send_chat_action(message.chat.id, 'typing')
         bot.reply_to(message, f"🤖 **OpenRouter (Gemma 2):**\n{ask_openrouter(text)}")
 
-    # 4.1 โต้ตอบข้อความแชทปกติ & URL Link Reading
     @bot.message_handler(content_types=['text'])
     def handle_text(message):
         text = message.text
         bot.send_chat_action(message.chat.id, 'typing')
         
-        # ฟังก์ชันอ่าน URL Link หากพบลิงก์ในข้อความ
         if "http://" in text or "https://" in text:
             try:
                 bot.reply_to(message, "🔍 กำลังดึงและอ่านเนื้อหาจาก URL Link...")
-                url_extracted = text.split()[0] # ดึงลิงก์คำแรก
+                url_extracted = text.split()[0]
                 web_res = requests.get(url_extracted, timeout=5)
                 soup = BeautifulSoup(web_res.text, 'html.parser')
                 web_text = soup.get_text()[:3000]
@@ -151,7 +146,6 @@ else:
             fallback_msg = f"⚠️ Gemini ขัดข้อง กำลังสลับไปใช้ OpenRouter...\n\n🤖:\n{ask_openrouter(text)}"
             bot.reply_to(message, fallback_msg)
 
-    # 4.2 โต้ตอบข้อความเสียง (Real Audio Speech-to-Text)
     @bot.message_handler(content_types=['voice', 'audio'])
     def handle_voice(message):
         bot.send_chat_action(message.chat.id, 'record_audio')
@@ -182,7 +176,6 @@ else:
             logger.error(f"Voice Error: {str(e)}")
             bot.reply_to(message, f"❌ เกิดข้อผิดพลาดในการประมวลผลเสียง: {str(e)}")
 
-    # 4.3 อ่านรูปภาพ (Vision Multimodal)
     @bot.message_handler(content_types=['photo'])
     def handle_photo(message):
         bot.send_chat_action(message.chat.id, 'typing')
@@ -207,7 +200,6 @@ else:
             logger.error(f"Photo Error: {str(e)}")
             bot.reply_to(message, f"❌ ไม่สามารถอ่านรูปภาพได้: {str(e)}")
 
-    # 4.4 อ่านไฟล์เอกสาร, ไฟล์ Office, และ Script ทุกนามสกุล (พร้อมจัดบรรทัดโค้ด & เพิ่ม Comment โพสต์แจกแจงรายละเอียด)
     @bot.message_handler(content_types=['document'])
     def handle_document(message):
         file_name = message.document.file_name
@@ -216,7 +208,6 @@ else:
             file_info = bot.get_file(message.document.file_id)
             downloaded_file = bot.download_file(file_info.file_path)
             
-            # รองรับไฟล์ script และเอกสารข้อความ
             if file_name.endswith(('.py', '.js', '.txt', '.json', '.html', '.css', '.cpp', '.h', '.sql', '.sh', '.md', '.csv')):
                 code_content = downloaded_file.decode('utf-8')[:6000]
                 prompt = (
@@ -234,7 +225,6 @@ else:
                 )
                 bot.reply_to(message, f"🛠️ **ผลการวิเคราะห์ จัดรูปแบบ Script และเพิ่ม Comment:**\n\n{response.text}")
             else:
-                # สำหรับไฟล์ Office เช่น .docx, .pdf ฯลฯ ส่งให้ Gemini อ่านผ่าน File API โดยตรง
                 temp_doc_path = f"temp_{file_name}"
                 with open(temp_doc_path, 'wb') as f:
                     f.write(downloaded_file)
@@ -256,6 +246,9 @@ else:
     if __name__ == "__main__":
         threading.Thread(target=run_server, daemon=True).start()
         logger.info("🔄 กำลังล้าง Webhook เก่า และเริ่มกระบวนการ Polling...")
-        bot.remove_webhook()
+        try:
+            bot.remove_webhook()
+        except Exception:
+            pass
         logger.info("✅ Telegram Bot (Super Full Options) กำลังทำงาน...")
-        bot.infinity_polling()
+        bot.infinity_polling(skip_pending=True)
