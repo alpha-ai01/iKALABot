@@ -1,5 +1,6 @@
 import os
 import sys
+import time
 import telebot
 from google import genai
 from openai import OpenAI
@@ -35,7 +36,7 @@ if OPENROUTER_API_KEY:
 def ask_openrouter_fallback(prompt_text):
     """ส่ง Request ไปที่ OpenRouter โดยใช้ meta-llama/llama-3.1-8b-instruct"""
     if not openrouter_client:
-        return " [Fallback Error]: OPENROUTER_API_KEY is not set."
+        return "⚠️ [Fallback Error]: OPENROUTER_API_KEY is not set."
     try:
         response = openrouter_client.chat.completions.create(
             model="meta-llama/llama-3.1-8b-instruct",
@@ -47,7 +48,7 @@ def ask_openrouter_fallback(prompt_text):
         )
         return response.choices[0].message.content
     except Exception as e:
-        return f" [Fallback Failed]: {e}"
+        return f"⚠️ [Fallback Failed]: {e}"
 
 # ---------------------------------------------------------
 # 3. Telegram Message Handlers
@@ -75,17 +76,28 @@ def handle_text_message(message):
             bot.reply_to(message, res.text)
             return
         except Exception as e:
-            print(f"[Gemini Primary Failed]: {e} -> Attempting OpenRouter Fallback...")
+            # ดักจับทั้ง 503 UNAVAILABLE และ Error อื่นๆ ของ Gemini
+            print(f"[Gemini Exception]: {e} -> Auto Switching to OpenRouter Fallback...")
     
-    # 2. หาก Gemini มีปัญหาหรือไม่มี Key จะ Auto-Fallback ไปยัง OpenRouter
-    bot.reply_to(message, "⚠️ [System Notice]: Primary model unavailable. Switching to OpenRouter (Llama 3.1 8B Instruct)...")
+    # 2. หาก Gemini มีปัญหา (เช่น 503 High Demand) จะ Auto-Fallback ไปยัง OpenRouter
+    bot.reply_to(message, "⚠️ [System Notice]: Gemini is experiencing high demand (503). Auto-switching to Llama 3.1 8B Instruct via OpenRouter...")
     fallback_response = ask_openrouter_fallback(user_prompt)
     bot.reply_to(message, fallback_response)
 
 # ---------------------------------------------------------
-# 4. Pure Polling Execution
+# 4. Pure Polling Execution with Conflict Prevention
 # ---------------------------------------------------------
 if __name__ == "__main__":
     print("=== Starting Bot in Pure Polling Mode ===")
+    
+    # เคลียร์ Webhook เก่าออก ป้องกัน Error 409 Conflict
+    try:
+        bot.remove_webhook()
+        time.sleep(1)
+    except Exception as e:
+        print(f"[Warning] Failed to remove webhook: {e}")
+
     print("Primary: gemini-3.6-flash | Fallback: meta-llama/llama-3.1-8b-instruct")
+    
+    # รัน Polling ยาวๆ
     bot.infinity_polling(skip_pending=True)
