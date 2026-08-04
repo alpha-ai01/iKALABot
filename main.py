@@ -1,12 +1,28 @@
 import os
 import sys
 import time
+import threading
 import telebot
+from flask import Flask
 from google import genai
 from openai import OpenAI
 
 # ---------------------------------------------------------
-# 1. Environment & Security Checks
+# Dummy Web Server for Render Web Service Health Check
+# ---------------------------------------------------------
+app = Flask(__name__)
+
+@app.route('/')
+@app.route('/health')
+def health_check():
+    return "OK - Bot is running", 200
+
+def run_web_server():
+    port = int(os.environ.get("PORT", 10000))
+    app.run(host="0.0.0.0", port=port)
+
+# ---------------------------------------------------------
+# Bot Initialization
 # ---------------------------------------------------------
 TELEGRAM_BOT_TOKEN = os.environ.get("TELEGRAM_BOT_TOKEN")
 GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY")
@@ -17,11 +33,8 @@ if not TELEGRAM_BOT_TOKEN:
     sys.exit(1)
 
 bot = telebot.TeleBot(TELEGRAM_BOT_TOKEN)
-
-# Primary Client (Gemini Direct)
 gemini_client = genai.Client(api_key=GEMINI_API_KEY) if GEMINI_API_KEY else None
 
-# Fallback Client (OpenRouter Gateway)
 openrouter_client = None
 if OPENROUTER_API_KEY:
     openrouter_client = OpenAI(
@@ -29,42 +42,29 @@ if OPENROUTER_API_KEY:
         api_key=OPENROUTER_API_KEY,
     )
 
-# ---------------------------------------------------------
-# Helper Function: Message Chunking for Telegram (Max 4000 chars)
-# ---------------------------------------------------------
 def send_long_message(message_obj, text):
     max_length = 4000
     if len(text) <= max_length:
         bot.reply_to(message_obj, text)
         return
-
     for i in range(0, len(text), max_length):
         chunk = text[i:i + max_length]
         bot.send_message(message_obj.chat.id, chunk)
         time.sleep(0.5)
 
-# ---------------------------------------------------------
-# Helper Function: OpenRouter Fallback
-# ---------------------------------------------------------
 def ask_openrouter_fallback(prompt_text):
     if not openrouter_client:
-        return "⚠️ [Fallback Error]: OPENROUTER_API_KEY is not configured on Render."
+        return "⚠️ [Fallback Error]: OPENROUTER_API_KEY is missing."
     try:
         response = openrouter_client.chat.completions.create(
             model="meta-llama/llama-3.1-8b-instruct",
             messages=[{"role": "user", "content": prompt_text}],
-            extra_headers={
-                "HTTP-Referer": "https://render.com",
-                "X-Title": "iKALABot"
-            }
+            extra_headers={"HTTP-Referer": "https://render.com", "X-Title": "iKALABot"}
         )
         return response.choices[0].message.content
     except Exception as e:
         return f"⚠️ [Fallback Exception]: {e}"
 
-# ---------------------------------------------------------
-# Telegram Handlers
-# ---------------------------------------------------------
 @bot.message_handler(commands=['start', 'help'])
 def send_welcome(message):
     bot.reply_to(
@@ -77,8 +77,6 @@ def send_welcome(message):
 @bot.message_handler(func=lambda message: True)
 def handle_text_message(message):
     user_prompt = message.text
-    
-    # 1. Try Primary Model: Gemini 3.6 Flash
     if gemini_client:
         try:
             res = gemini_client.models.generate_content(
@@ -89,36 +87,28 @@ def handle_text_message(message):
                 send_long_message(message, res.text)
                 return
         except Exception as e:
-            # Catch 429 Quota Exhausted, 503 Overload, or any API Exception
-            print(f"[Gemini API Exception]: {e} -> Auto-fallback to OpenRouter...")
+            print(f"[Gemini Exception]: {e} -> Switching to OpenRouter...")
 
-    # 2. Fallback Model: OpenRouter Llama 3.1 8B Instruct
-    bot.reply_to(
-        message, 
-        "⚠️ [Notice]: Gemini API Error/Rate Limit. Switching to OpenRouter (Llama 3.1 8B Instruct)..."
-    )
+    bot.reply_to(message, "⚠️ [Notice]: Gemini limit/error. Switching to OpenRouter...")
     fallback_response = ask_openrouter_fallback(user_prompt)
     send_long_message(message, fallback_response)
 
-# ---------------------------------------------------------
-# Main Execution with Resilient Polling Loop
-# ---------------------------------------------------------
 if __name__ == "__main__":
-    print("=== Starting main.py in Pure Polling Mode with Robust Retry Loop ===")
+    # รัน Web Server เป็น Background Thread เพื่อตอบสนอง Render Health Check
+    threading.Thread(target=run_web_server, daemon=True).start()
     
-    # เคลียร์ Webhook ตกค้าง
+    # เคลียร์ Webhook เก่า
     try:
         bot.remove_webhook()
         time.sleep(2)
     except Exception as e:
         print(f"[Warning] Webhook cleanup: {e}")
 
-    # Resilience Polling Loop ป้องกันบอทดับจาก 409 Conflict ช่วง Startup
+    # Start Polling
     while True:
         try:
             print("[INFO] TeleBot starting infinity_polling...")
             bot.infinity_polling(timeout=20, long_polling_timeout=10)
         except Exception as e:
-            print(f"[Polling Error Caught]: {e}")
-            print("[INFO] Waiting 5 seconds before reconnecting...")
+            print(f"[Polling Exception Caught]: {e}")
             time.sleep(5)
