@@ -18,6 +18,16 @@ if not TELEGRAM_BOT_TOKEN:
 
 bot = telebot.TeleBot(TELEGRAM_BOT_TOKEN)
 
+from dispatcher import execute_task
+
+# ตัวอย่างการใช้งานเมื่อผู้ใช้พิมพ์คำสั่ง
+# เช่น ถ้าผู้ใช้ส่งคำสั่งให้ค้นหาข้อมูล
+result = execute_task("search", prompt=user_message)
+
+# เช่น ถ้าผู้ใช้ส่งไฟล์ PDF มาวิเคราะห์
+result = execute_task("pdf", file_path=pdf_path)
+
+
 # Primary Client
 gemini_client = genai.Client(api_key=GEMINI_API_KEY) if GEMINI_API_KEY else None
 
@@ -28,7 +38,6 @@ if OPENROUTER_API_KEY:
         base_url="https://openrouter.ai/api/v1",
         api_key=OPENROUTER_API_KEY,
     )
-
 # ---------------------------------------------------------
 # Helper Function: Split Long Messages for Telegram (Max 4000 chars)
 # ---------------------------------------------------------
