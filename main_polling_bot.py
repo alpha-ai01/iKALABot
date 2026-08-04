@@ -122,3 +122,21 @@ if __name__ == "__main__":
         print(f"[Warning] remove_webhook: {e}")
 
     bot.infinity_polling(skip_pending=True)
+
+# Voice Message Handler (Added)
+@bot.message_handler(content_types=['voice', 'audio'])
+def handle_voice_message(message):
+    try:
+        file_info = bot.get_file(message.voice.file_id if message.voice else message.audio.file_id)
+        downloaded_file = bot.download_file(file_info.file_path)
+        
+        # ส่งไฟล์เสียงไปยัง Gemini Vision/Multimodal Model
+        from ai.gemini_api import generate_gemini_response
+        response = generate_gemini_response(downloaded_file, is_vision=True)
+        
+        if not response:
+            response = "ขออภัยครับ ไม่สามารถประมวลผลข้อความเสียงนี้ได้"
+            
+        bot.reply_to(message, response)
+    except Exception as e:
+        bot.reply_to(message, f"เกิดข้อผิดพลาดในการรับข้อความเสียง: {str(e)}")
