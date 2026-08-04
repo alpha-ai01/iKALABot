@@ -4,3 +4,4 @@ openai
 Pillow
 gTTS
 requests
+openai
