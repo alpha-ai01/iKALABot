@@ -16,13 +16,12 @@ if not TELEGRAM_BOT_TOKEN:
     print("[CRITICAL ERROR]: Missing TELEGRAM_BOT_TOKEN!")
     sys.exit(1)
 
-# Initialize Clients
 bot = telebot.TeleBot(TELEGRAM_BOT_TOKEN)
 
-# Primary Model Client (Gemini Direct)
+# Primary Client
 gemini_client = genai.Client(api_key=GEMINI_API_KEY) if GEMINI_API_KEY else None
 
-# Fallback Model Client (OpenRouter)
+# Fallback Client
 openrouter_client = None
 if OPENROUTER_API_KEY:
     openrouter_client = OpenAI(
@@ -31,12 +30,27 @@ if OPENROUTER_API_KEY:
     )
 
 # ---------------------------------------------------------
-# 2. OpenRouter Fallback Helper Function
+# Helper Function: Split Long Messages for Telegram (Max 4000 chars)
+# ---------------------------------------------------------
+def send_long_message(message_obj, text):
+    """ตัดแบ่งข้อความตอบกลับหากยาวเกินขีดจำกัดของ Telegram"""
+    max_length = 4000
+    if len(text) <= max_length:
+        bot.reply_to(message_obj, text)
+        return
+
+    # แบ่งส่งเป็นส่วนๆ
+    for i in range(0, len(text), max_length):
+        chunk = text[i:i + max_length]
+        bot.send_message(message_obj.chat.id, chunk)
+        time.sleep(0.5)
+
+# ---------------------------------------------------------
+# Helper Function: OpenRouter Fallback
 # ---------------------------------------------------------
 def ask_openrouter_fallback(prompt_text):
-    """ส่ง Request ไปที่ OpenRouter โดยใช้ meta-llama/llama-3.1-8b-instruct"""
     if not openrouter_client:
-        return "⚠️ [Fallback Error]: OPENROUTER_API_KEY is not set."
+        return "⚠️ [Fallback Error]: OPENROUTER_API_KEY is missing."
     try:
         response = openrouter_client.chat.completions.create(
             model="meta-llama/llama-3.1-8b-instruct",
@@ -48,10 +62,10 @@ def ask_openrouter_fallback(prompt_text):
         )
         return response.choices[0].message.content
     except Exception as e:
-        return f"⚠️ [Fallback Failed]: {e}"
+        return f"⚠️ [Fallback Exception]: {e}"
 
 # ---------------------------------------------------------
-# 3. Telegram Message Handlers
+# Message Handlers
 # ---------------------------------------------------------
 @bot.message_handler(commands=['start', 'help'])
 def send_welcome(message):
@@ -65,39 +79,37 @@ def send_welcome(message):
 @bot.message_handler(func=lambda message: True)
 def handle_text_message(message):
     user_prompt = message.text
+    print(f"=== Received Prompt Length: {len(user_prompt)} chars ===")
     
-    # 1. ลองเรียกใช้ Gemini 3.6 Flash (Primary)
+    # 1. Primary Route: Gemini 3.6 Flash
     if gemini_client:
         try:
             res = gemini_client.models.generate_content(
                 model="gemini-3.6-flash",
                 contents=user_prompt
             )
-            bot.reply_to(message, res.text)
-            return
+            if res.text:
+                send_long_message(message, res.text)
+                return
+            else:
+                print("[Gemini Warning]: Empty text response returned.")
         except Exception as e:
-            # ดักจับทั้ง 503 UNAVAILABLE และ Error อื่นๆ ของ Gemini
-            print(f"[Gemini Exception]: {e} -> Auto Switching to OpenRouter Fallback...")
-    
-    # 2. หาก Gemini มีปัญหา (เช่น 503 High Demand) จะ Auto-Fallback ไปยัง OpenRouter
-    bot.reply_to(message, "⚠️ [System Notice]: Gemini is experiencing high demand (503). Auto-switching to Llama 3.1 8B Instruct via OpenRouter...")
+            print(f"[Gemini Exception Log]: {e}")
+
+    # 2. Fallback Route: OpenRouter (Llama 3.1 8B Instruct)
+    print("--> Triggering OpenRouter Fallback...")
     fallback_response = ask_openrouter_fallback(user_prompt)
-    bot.reply_to(message, fallback_response)
+    send_long_message(message, fallback_response)
 
 # ---------------------------------------------------------
-# 4. Pure Polling Execution with Conflict Prevention
+# Main Execution
 # ---------------------------------------------------------
 if __name__ == "__main__":
-    print("=== Starting Bot in Pure Polling Mode ===")
-    
-    # เคลียร์ Webhook เก่าออก ป้องกัน Error 409 Conflict
+    print("=== Starting Pure Polling Bot with Long Message Support ===")
     try:
         bot.remove_webhook()
         time.sleep(1)
     except Exception as e:
-        print(f"[Warning] Failed to remove webhook: {e}")
+        print(f"[Warning] remove_webhook: {e}")
 
-    print("Primary: gemini-3.6-flash | Fallback: meta-llama/llama-3.1-8b-instruct")
-    
-    # รัน Polling ยาวๆ
     bot.infinity_polling(skip_pending=True)
