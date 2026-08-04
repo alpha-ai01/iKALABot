@@ -1,12 +1,19 @@
 import os
-import config
+from openai import OpenAI
 
-def get_openrouter_model_name(is_x_search=False):
-    if is_x_search:
-        return config.DEFAULT_X_SEARCH_MODEL
-    return config.DEFAULT_OPENROUTER_MODEL
+client = OpenAI(
+    api_key=os.getenv('OPENROUTER_API_KEY'),
+    base_url='https://openrouter.ai/api/v1'
+)
 
 def generate_openrouter_response(prompt, is_x_search=False):
-    model_name = get_openrouter_model_name(is_x_search)
-    # คงโครงสร้างเดิมของการเรียก OpenRouter
-    return f"Response using OpenRouter Model: {model_name}"
+    model = 'openai/gpt-4o-mini'
+
+    response = client.chat.completions.create(
+        model=model,
+        messages=[
+            {'role': 'user', 'content': prompt}
+        ]
+    )
+
+    return response.choices[0].message.content.strip()

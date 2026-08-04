@@ -1,5 +1,4 @@
 import os
-from dispatcher import execute_task
 import threading
 from flask import Flask
 import telebot
@@ -95,7 +94,7 @@ def handle_message(message):
     except Exception as e:
         print(f"[Chat Action Error]: {e}")
 
-    reply = execute_task('chat', message.text)
+    reply = get_ai_response(message.text)
     bot.reply_to(message, reply)
 
 # ==========================================

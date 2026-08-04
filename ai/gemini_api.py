@@ -1,12 +1,11 @@
 import os
-import config
+from google import genai
 
-def get_gemini_model_name(is_vision=False):
-    if is_vision:
-        return config.DEFAULT_GEMINI_VISION_MODEL
-    return config.DEFAULT_GEMINI_MODEL
+client = genai.Client(api_key=os.getenv('GEMINI_API_KEY'))
 
 def generate_gemini_response(prompt, is_vision=False):
-    model_name = get_gemini_model_name(is_vision)
-    # คงโครงสร้างเดิมของการจัดการ API Call
-    return f"Response using Gemini Model: {model_name}"
+    response = client.models.generate_content(
+        model='gemini-2.5-flash',
+        contents=prompt
+    )
+    return (response.text or '').strip()

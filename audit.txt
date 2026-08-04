@@ -1,0 +1,198 @@
+
+===== PWD =====
+/data/data/com.termux/files/home/iKALABot
+
+===== GIT =====
+* main
+?? audit.txt
+?? iKALABot/
+?? test_new_apis.py
+
+===== ROOT =====
+total 238K
+drwx------.  7 u0_a238 u0_a238 4.0K Aug  4 18:13 .
+drwx------. 39 u0_a238 u0_a238 3.4K Aug  4 18:13 ..
+-rw-------.  1 u0_a238 u0_a238  135 Aug  2 15:40 .env
+drwx------.  7 u0_a238 u0_a238 3.4K Aug  4 18:13 .git
+-rw-------.  1 u0_a238 u0_a238   24 Jul 31 21:05 .gitignore
+-rw-------.  1 u0_a238 u0_a238  575 Aug  3 20:18 .pre-commit-config.yaml
+-rw-------.  1 u0_a238 u0_a238   38 Aug  3 20:18 .prettierignore
+-rw-------.  1 u0_a238 u0_a238  105 Aug  3 20:18 .prettierrc
+drwx------.  2 u0_a238 u0_a238 3.4K Jul 27 12:32 __pycache__
+-rw-------.  1 u0_a238 u0_a238  746 Aug  3 19:24 add_image_generation.py
+-rw-------.  1 u0_a238 u0_a238 2.7K Aug  3 19:14 add_interaction_handler.py
+-rw-------.  1 u0_a238 u0_a238 1.2K Aug  3 19:52 add_openrouter_curl_stream.py
+-rw-------.  1 u0_a238 u0_a238 2.2K Aug  3 19:52 add_openrouter_js_reasoning.py
+-rw-------.  1 u0_a238 u0_a238 2.0K Aug  3 19:47 add_openrouter_reasoning.py
+-rw-------.  1 u0_a238 u0_a238 2.5K Aug  3 19:53 add_openrouter_sdk_stream.py
+-rw-------.  1 u0_a238 u0_a238 1.2K Aug  3 19:47 add_openrouter_stream.py
+-rw-------.  1 u0_a238 u0_a238 1.3K Aug  3 19:23 add_pydantic_interaction.py
+-rw-------.  1 u0_a238 u0_a238  511 Aug  3 20:04 add_python_docx.py
+-rw-------.  1 u0_a238 u0_a238  644 Aug  3 19:33 add_quick_explanation.py
+-rw-------.  1 u0_a238 u0_a238  903 Aug  3 18:55 add_search_tool.py
+-rw-------.  1 u0_a238 u0_a238  881 Aug  3 19:32 add_server_state.py
+-rw-------.  1 u0_a238 u0_a238 1.3K Aug  3 19:32 add_server_state_response_handler.py
+-rw-------.  1 u0_a238 u0_a238  641 Aug  3 19:27 add_streaming_interaction.py
+-rw-------.  1 u0_a238 u0_a238 1.3K Aug  3 19:21 add_structured_output.py
+drwx------.  2 u0_a238 u0_a238 3.4K Aug  3 10:06 ai
+-rw-------.  1 u0_a238 u0_a238  147 Aug  4 18:13 audit.txt
+-rw-------.  1 u0_a238 u0_a238  330 Aug  4 15:57 config.py
+-rw-------.  1 u0_a238 u0_a238 1.4K Aug  4 16:23 dispatcher.py
+-rw-------.  1 u0_a238 u0_a238 1017 Aug  3 17:42 fix_bot.py
+-rw-------.  1 u0_a238 u0_a238  345 Aug  3 20:59 fix_bs4_requirement.py
+-rw-------.  1 u0_a238 u0_a238  339 Aug  3 20:56 fix_genai_requirement.py
+-rw-------.  1 u0_a238 u0_a238  351 Aug  3 20:40 fix_requirements.py
+drwx------.  5 u0_a238 u0_a238 4.0K Aug  4 18:11 iKALABot
+-rw-------.  1 u0_a238 u0_a238 4.9K Aug  4 15:34 main.py
+-rw-------.  1 u0_a238 u0_a238 5.4K Aug  4 16:35 main_polling_bot.py
+-rw-------.  1 u0_a238 u0_a238 1.8K Aug  3 19:34 parse_gemini_brief_response.py
+-rw-------.  1 u0_a238 u0_a238   71 Aug  4 13:54 requirements.txt
+-rw-------.  1 u0_a238 u0_a238  366 Aug  3 21:04 restore_all_requirements.py
+-rw-------.  1 u0_a238 u0_a238  215 Aug  3 20:18 ruff.toml
+-rw-------.  1 u0_a238 u0_a238  961 Aug  4 12:32 run_chat_session.py
+-rw-------.  1 u0_a238 u0_a238 1.4K Aug  4 12:38 run_deep_research.py
+-rw-------.  1 u0_a238 u0_a238 1.8K Aug  4 12:35 run_ev_battery_research.py
+-rw-------.  1 u0_a238 u0_a238 1.4K Aug  4 12:37 run_fibonacci_task.py
+-rw-------.  1 u0_a238 u0_a238 1.8K Aug  4 12:35 run_file_search_research.py
+-rw-------.  1 u0_a238 u0_a238 1.7K Aug  4 12:34 run_followup_interaction.py
+-rw-------.  1 u0_a238 u0_a238 1.5K Aug  4 12:38 run_function_result.py
+-rw-------.  1 u0_a238 u0_a238 1.5K Aug  4 12:39 run_function_result_base64.py
+-rw-------.  1 u0_a238 u0_a238 2.2K Aug  4 12:35 run_image_research_task.py
+-rw-------.  1 u0_a238 u0_a238 1.3K Aug  4 12:33 run_local_image_analysis.py
+-rw-------.  1 u0_a238 u0_a238 1.7K Aug  4 12:36 run_mcp_deployment_check.py
+-rw-------.  1 u0_a238 u0_a238 1.6K Aug  4 12:34 run_pdf_research_task.py
+-rw-------.  1 u0_a238 u0_a238  389 Aug  4 12:33 run_simple_generate.py
+-rw-------.  1 u0_a238 u0_a238 1.4K Aug  4 12:37 run_url_summary.py
+-rw-------.  1 u0_a238 u0_a238 2.7K Aug  3 20:18 setup_devops_security.py
+-rw-------.  1 u0_a238 u0_a238  325 Aug  3 20:18 sonar-project.properties
+-rw-------.  1 u0_a238 u0_a238 1.8K Aug  4 16:44 test_new_apis.py
+-rw-------.  1 u0_a238 u0_a238  908 Aug  3 19:32 update_main_flow.py
+drwx------.  2 u0_a238 u0_a238 3.4K Aug  3 10:06 utils
+
+===== DIR =====
+.
+./.git
+./.git/hooks
+./.git/info
+./.git/logs
+./.git/objects
+./.git/refs
+./__pycache__
+./ai
+./iKALABot
+./iKALABot/.git
+./iKALABot/ai
+./iKALABot/utils
+./utils
+
+===== PY =====
+./add_image_generation.py
+./add_interaction_handler.py
+./add_openrouter_curl_stream.py
+./add_openrouter_js_reasoning.py
+./add_openrouter_reasoning.py
+./add_openrouter_sdk_stream.py
+./add_openrouter_stream.py
+./add_pydantic_interaction.py
+./add_python_docx.py
+./add_quick_explanation.py
+./add_search_tool.py
+./add_server_state.py
+./add_server_state_response_handler.py
+./add_streaming_interaction.py
+./add_structured_output.py
+./ai/gemini_api.py
+./ai/openrouter.py
+./ai/openrouter_api.py
+./ai/router.py
+./config.py
+./dispatcher.py
+./fix_bot.py
+./fix_bs4_requirement.py
+./fix_genai_requirement.py
+./fix_requirements.py
+./iKALABot/add_image_generation.py
+./iKALABot/add_interaction_handler.py
+./iKALABot/add_openrouter_curl_stream.py
+./iKALABot/add_openrouter_js_reasoning.py
+./iKALABot/add_openrouter_reasoning.py
+./iKALABot/add_openrouter_sdk_stream.py
+./iKALABot/add_openrouter_stream.py
+./iKALABot/add_pydantic_interaction.py
+./iKALABot/add_python_docx.py
+./iKALABot/add_quick_explanation.py
+./iKALABot/add_search_tool.py
+./iKALABot/add_server_state.py
+./iKALABot/add_server_state_response_handler.py
+./iKALABot/add_streaming_interaction.py
+./iKALABot/add_structured_output.py
+./iKALABot/ai/gemini_api.py
+./iKALABot/ai/openrouter.py
+./iKALABot/ai/openrouter_api.py
+./iKALABot/ai/router.py
+./iKALABot/config.py
+./iKALABot/dispatcher.py
+./iKALABot/fix_bot.py
+./iKALABot/fix_bs4_requirement.py
+./iKALABot/fix_genai_requirement.py
+./iKALABot/fix_requirements.py
+./iKALABot/main.py
+./iKALABot/main_polling_bot.py
+./iKALABot/parse_gemini_brief_response.py
+./iKALABot/restore_all_requirements.py
+./iKALABot/run_chat_session.py
+./iKALABot/run_deep_research.py
+./iKALABot/run_ev_battery_research.py
+./iKALABot/run_fibonacci_task.py
+./iKALABot/run_file_search_research.py
+./iKALABot/run_followup_interaction.py
+./iKALABot/run_function_result.py
+./iKALABot/run_function_result_base64.py
+./iKALABot/run_image_research_task.py
+./iKALABot/run_local_image_analysis.py
+./iKALABot/run_mcp_deployment_check.py
+./iKALABot/run_pdf_research_task.py
+./iKALABot/run_simple_generate.py
+./iKALABot/run_url_summary.py
+./iKALABot/setup_devops_security.py
+./iKALABot/update_main_flow.py
+./iKALABot/utils/backup.py
+./iKALABot/utils/file_handler.py
+./iKALABot/utils/logger.py
+./iKALABot/utils/tools.py
+./main.py
+./main_polling_bot.py
+./parse_gemini_brief_response.py
+./restore_all_requirements.py
+./run_chat_session.py
+./run_deep_research.py
+./run_ev_battery_research.py
+./run_fibonacci_task.py
+./run_file_search_research.py
+./run_followup_interaction.py
+./run_function_result.py
+./run_function_result_base64.py
+./run_image_research_task.py
+./run_local_image_analysis.py
+./run_mcp_deployment_check.py
+./run_pdf_research_task.py
+./run_simple_generate.py
+./run_url_summary.py
+./setup_devops_security.py
+./test_new_apis.py
+./update_main_flow.py
+./utils/backup.py
+./utils/file_handler.py
+./utils/logger.py
+./utils/tools.py
+
+===== REQUIREMENTS =====
+./requirements.txt
+./iKALABot/requirements.txt
+
+===== ENV =====
+./.env
+
+===== VOICE =====
+
+===== WEB =====
