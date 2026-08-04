@@ -23,10 +23,10 @@ OPENROUTER_KEY = os.getenv("OPENROUTER_API_KEY")
 
 bot = telebot.TeleBot(BOT_TOKEN)
 
-# Gemini Client (ตัวหลัก)
+# Gemini Client (ตัวหลัก - gemini-3.6-flash)
 gemini_client = genai.Client(api_key=GEMINI_KEY) if GEMINI_KEY else None
 
-# OpenRouter Client (ตัวสำรอง - โมเดลฟรีตามไกด์ไลน์)
+# OpenRouter Client (ตัวสำรอง - llama-3.1-8b / gemma-2-9b)
 openrouter_client = openai.OpenAI(
     base_url="https://openrouter.ai/api/v1",
     api_key=OPENROUTER_KEY,
@@ -49,11 +49,11 @@ SYSTEM_INSTRUCTION = (
 # 4. ฟังก์ชันประมวลผล AI พร้อมระบบ Fallback
 # ==========================================
 def get_ai_response(prompt_text):
-    # 4.1 ลองใช้ Gemini ตัวหลัก
+    # 4.1 เรียกใช้ Gemini ตัวหลัก (gemini-3.6-flash)
     if gemini_client:
         try:
             res = gemini_client.models.generate_content(
-                model="gemini-2.5-flash",
+                model="gemini-3.6-flash",
                 contents=f"{SYSTEM_INSTRUCTION}\n\nคำถามจากผู้ใช้: {prompt_text}"
             )
             if res and res.text:
@@ -61,7 +61,7 @@ def get_ai_response(prompt_text):
         except Exception as e:
             print(f"[Gemini Exception]: {e}")
 
-    # 4.2 สลับมาใช้ OpenRouter โมเดลฟรี
+    # 4.2 สลับมาใช้ OpenRouter โมเดลสำรอง
     if openrouter_client:
         try:
             print(f"[Fallback] Switched to OpenRouter Free Model: {OPENROUTER_FREE_MODEL}")
@@ -77,7 +77,7 @@ def get_ai_response(prompt_text):
         except Exception as e:
             print(f"[OpenRouter Exception]: {e}")
 
-    # 4.3 ถ้าล่มทั้งคู่ ตอบแจ้งเตือนแทนการเงียบ
+    # 4.3 ถ้าล่มทั้งคู่ ตอบแจ้งเตือนผู้ใช้
     return "ขออภัยครับ ขณะนี้ระบบ AI ขัดข้องชั่วคราว กรุณาลองใหม่อีกครั้งในภายหลัง"
 
 # ==========================================
@@ -89,6 +89,11 @@ def send_welcome(message):
 
 @bot.message_handler(func=lambda message: True)
 def handle_message(message):
+    try:
+        bot.send_chat_action(message.chat.id, 'typing')
+    except Exception as e:
+        print(f"[Chat Action Error]: {e}")
+
     reply = get_ai_response(message.text)
     bot.reply_to(message, reply)
 
