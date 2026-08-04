@@ -7,8 +7,10 @@ client = genai.Client(
 )
 
 def speech_to_text(audio_bytes):
+    model = config.DEFAULT_GEMINI_MODEL
+
     response = client.models.generate_content(
-        model=config.DEFAULT_GEMINI_MODEL,
+        model=model,
         contents=[
             "ถอดข้อความจากไฟล์เสียงนี้เป็นข้อความเท่านั้น",
             {
