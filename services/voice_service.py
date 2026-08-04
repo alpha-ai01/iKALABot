@@ -9,10 +9,17 @@ def process_voice_message(bot, message):
 
         text = speech_to_text(audio)
 
-        if not text:
-            return "ไม่สามารถถอดเสียงได้"
+        if not text or text.startswith("[STT ERROR]"):
+            return "ขออภัยครับ ไม่สามารถถอดเสียงได้ในขณะนี้ กรุณาลองใหม่อีกครั้ง"
 
-        return execute_task("chat", text)
+        
+reply = execute_task("chat", text)
+
+if not reply:
+    reply = "ผมไม่สามารถสร้างคำตอบได้"
+
+return reply
+
 
     except Exception as e:
         return f"Voice Error: {e}"
