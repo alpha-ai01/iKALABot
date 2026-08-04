@@ -1,604 +1,114 @@
 import os
-import threading
-import http.server
-import socketserver
+import sys
+import time
 import telebot
 from google import genai
-import requests
-import json
-from datetime import datetime
-import logging
-from bs4 import BeautifulSoup
-from gtts import gTTS
+from openai import OpenAI
 
-PORT = int(os.environ.get("PORT", 8080))
+# ---------------------------------------------------------
+# 1. Environment & Security Checks
+# ---------------------------------------------------------
 TELEGRAM_BOT_TOKEN = os.environ.get("TELEGRAM_BOT_TOKEN")
-OPENROUTER_API_KEY = os.environ.get("OPENROUTER_API_KEY")
 GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY")
-
-class SafeLogFormatter(logging.Formatter):
-    def format(self, record):
-        log_msg = super().format(record)
-        if TELEGRAM_BOT_TOKEN: log_msg = log_msg.replace(TELEGRAM_BOT_TOKEN, "[HIDDEN_BOT_TOKEN]")
-        if OPENROUTER_API_KEY: log_msg = log_msg.replace(OPENROUTER_API_KEY, "[HIDDEN_OR_KEY]")
-        if GEMINI_API_KEY: log_msg = log_msg.replace(GEMINI_API_KEY, "[HIDDEN_GEMINI_KEY]")
-        return log_msg
-
-logger = logging.getLogger("iKALABot")
-logger.setLevel(logging.INFO)
-handler = logging.StreamHandler()
-handler.setFormatter(SafeLogFormatter('%(asctime)s - %(levelname)s - %(message)s'))
-logger.addHandler(handler)
-
-class MyHandler(http.server.SimpleHTTPRequestHandler):
-    def do_GET(self):
-        self.send_response(200)
-        self.send_header("Content-type", "text/plain; charset=utf-8")
-        self.end_headers()
-        self.wfile.write(b"iKALABot Super Full Options is running!")
-    def do_HEAD(self):
-        self.send_response(200)
-        self.end_headers()
-    def do_POST(self):
-        self.send_response(200)
-        self.end_headers()
-        self.wfile.write(b"OK")
-
-def run_server():
-    with socketserver.TCPServer(("", PORT), MyHandler) as httpd:
-        httpd.serve_forever()
-
-def clean_text_for_bot(text):
-    cleaned = text.replace('*', '').replace('#', '').replace('_', '').replace('`', '')
-    return cleaned.strip()
-
-chat_histories = {}
-
-def get_system_context(chat_id):
-    now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-    history = chat_histories.get(chat_id, [])
-    history_str = "\n".join([f"{item['role']}: {item['text']}" for item in history[-6:]])
-    
-    return (
-        f"[System Info: Current time is {now}. You are iKALABot. "
-        f"STRICT RULE: Do NOT use markdown symbols like asterisks (*), hashes (#), underscores (_), or backticks (`). Plain text only.]\n\n"
-        f"Conversation History:\n{history_str}\n"
-    )
-
-def add_to_history(chat_id, role, text):
-    if chat_id not in chat_histories:
-        chat_histories[chat_id] = []
-    chat_histories[chat_id].append({"role": role, "text": text})
-    if len(chat_histories[chat_id]) > 20:
-        chat_histories[chat_id].pop(0)
+OPENROUTER_API_KEY = os.environ.get("OPENROUTER_API_KEY")
 
 if not TELEGRAM_BOT_TOKEN:
-    logger.error("ERROR: TELEGRAM_BOT_TOKEN not found")
-else:
-    bot = telebot.TeleBot(TELEGRAM_BOT_TOKEN)
-    gemini_client = genai.Client(api_key=GEMINI_API_KEY) if GEMINI_API_KEY else None
+    print("[CRITICAL ERROR]: Missing TELEGRAM_BOT_TOKEN!")
+    sys.exit(1)
 
-    @bot.message_handler(commands=['start', 'help'])
-    def send_welcome(message):
-        chat_id = message.chat.id
-        chat_histories[chat_id] = []
-        welcome_text = "iKALABot Ready (gemini-3.6-flash & Clean Text Enabled)"
-        bot.reply_to(message, welcome_text)
+bot = telebot.TeleBot(TELEGRAM_BOT_TOKEN)
 
-    @bot.message_handler(content_types=['text'])
-    def handle_text(message):
-        chat_id = message.chat.id
-        text = message.text
-        bot.send_chat_action(message.chat.id, 'typing')
-        
-        add_to_history(chat_id, "User", text)
-        prompt = f"{get_system_context(chat_id)}\nUser query: {text}"
-        
+# Primary Client (Gemini Direct)
+gemini_client = genai.Client(api_key=GEMINI_API_KEY) if GEMINI_API_KEY else None
+
+# Fallback Client (OpenRouter Gateway)
+openrouter_client = None
+if OPENROUTER_API_KEY:
+    openrouter_client = OpenAI(
+        base_url="https://openrouter.ai/api/v1",
+        api_key=OPENROUTER_API_KEY,
+    )
+
+# ---------------------------------------------------------
+# Helper Function: Message Chunking for Telegram (Max 4000 chars)
+# ---------------------------------------------------------
+def send_long_message(message_obj, text):
+    max_length = 4000
+    if len(text) <= max_length:
+        bot.reply_to(message_obj, text)
+        return
+
+    for i in range(0, len(text), max_length):
+        chunk = text[i:i + max_length]
+        bot.send_message(message_obj.chat.id, chunk)
+        time.sleep(0.5)
+
+# ---------------------------------------------------------
+# Helper Function: OpenRouter Fallback
+# ---------------------------------------------------------
+def ask_openrouter_fallback(prompt_text):
+    if not openrouter_client:
+        return "⚠️ [Fallback Error]: OPENROUTER_API_KEY is not configured on Render."
+    try:
+        response = openrouter_client.chat.completions.create(
+            model="meta-llama/llama-3.1-8b-instruct",
+            messages=[{"role": "user", "content": prompt_text}],
+            extra_headers={
+                "HTTP-Referer": "https://render.com",
+                "X-Title": "iKALABot"
+            }
+        )
+        return response.choices[0].message.content
+    except Exception as e:
+        return f"⚠️ [Fallback Exception]: {e}"
+
+# ---------------------------------------------------------
+# Telegram Handlers
+# ---------------------------------------------------------
+@bot.message_handler(commands=['start', 'help'])
+def send_welcome(message):
+    bot.reply_to(
+        message,
+        "🤖 iKALABot Active!\n"
+        "- Primary: gemini-3.6-flash\n"
+        "- Fallback: meta-llama/llama-3.1-8b-instruct (OpenRouter)"
+    )
+
+@bot.message_handler(func=lambda message: True)
+def handle_text_message(message):
+    user_prompt = message.text
+    
+    # 1. Try Primary Model: Gemini 3.6 Flash
+    if gemini_client:
         try:
-            response = gemini_client.models.generate_content(
-                model='gemini-3.6-flash',
-                contents=prompt,
+            res = gemini_client.models.generate_content(
+                model="gemini-3.6-flash",
+                contents=user_prompt
             )
-            final_reply = clean_text_for_bot(response.text)
-            add_to_history(chat_id, "Model", final_reply)
-            bot.reply_to(message, final_reply)
+            if res.text:
+                send_long_message(message, res.text)
+                return
         except Exception as e:
-            logger.error(f"Gemini Error: {str(e)}")
-            error_msg = "Quota exceeded or API error. Please try again later." if "429" in str(e) else "Error processing request"
-            bot.reply_to(message, error_msg)
+            # Catch 429 Quota Exhausted, 503 Overload, or any API Exception
+            print(f"[Gemini API Exception]: {e} -> Auto-fallback to OpenRouter...")
 
-    @bot.message_handler(content_types=['voice', 'audio'])
-    def handle_voice(message):
-        chat_id = message.chat.id
-        bot.send_chat_action(message.chat.id, 'record_audio')
-        try:
-            file_info = bot.get_file(message.voice.file_id if message.voice else message.audio.file_id)
-            downloaded_file = bot.download_file(file_info.file_path)
-            
-            temp_audio_path = "temp_voice.ogg"
-            with open(temp_audio_path, 'wb') as f:
-                f.write(downloaded_file)
-            
-            audio_file_ref = gemini_client.files.upload(file=temp_audio_path)
-            
-            response = gemini_client.models.generate_content(
-                model='gemini-3.6-flash',
-                contents=[
-                    audio_file_ref, 
-                    f"{get_system_context(chat_id)}\nListen to this voice message, consider history, and provide ONLY the direct answer in plain text."
-                ]
-            )
-            
-            reply_text = clean_text_for_bot(response.text)
-            add_to_history(chat_id, "User", "[Voice Message]")
-            add_to_history(chat_id, "Model", reply_text)
-            
-            bot.reply_to(message, reply_text)
-
-            bot.send_chat_action(message.chat.id, 'record_audio')
-            tts = gTTS(text=reply_text, lang='th')
-            reply_audio_path = "reply_voice.ogg"
-            tts.save(reply_audio_path)
-
-            with open(reply_audio_path, 'rb') as audio:
-                bot.send_voice(message.chat.id, audio)
-
-            if os.path.exists(temp_audio_path):
-                os.remove(temp_audio_path)
-            if os.path.exists(reply_audio_path):
-                os.remove(reply_audio_path)
-
-        except Exception as e:
-            logger.error(f"Voice Error: {str(e)}")
-            error_msg = "Voice quota exceeded (429)" if "429" in str(e) else f"Voice processing error: {str(e)}"
-            bot.reply_to(message, error_msg)
-
-    if __name__ == "__main__":
-        threading.Thread(target=run_server, daemon=True).start()
-        logger.info("Removing old webhook and connecting to Telegram...")
-        try:
-            bot.remove_webhook()
-        except Exception:
-            pass
-        logger.info("Telegram Bot is starting polling...")
-        bot.infinity_polling(timeout=60, long_polling_timeout=60)
-
-
-def call_gemini_interaction(prompt_text, media_files=None, use_search=True):
-    tools_config = [{"type": "google_search"}] if use_search else []
-    
-    # เรียกใช้งานผ่าน client.interactions.create ตามโครงสร้างใหม่
-    interaction = client.interactions.create(
-        model="gemini-3.6-flash",
-        input=prompt_text,
-        tools=tools_config
+    # 2. Fallback Model: OpenRouter Llama 3.1 8B Instruct
+    bot.reply_to(
+        message, 
+        "⚠️ [Notice]: Gemini Quota/Rate Limit Exceeded (429). Switching to OpenRouter (Llama 3.1 8B Instruct)..."
     )
-    
-    response_text = ""
-    citations = []
-    
-    # ดึงข้อความและ Annotation (Citations) จาก step
-    if hasattr(interaction, 'steps') and interaction.steps:
-        for step in interaction.steps:
-            if step.type == "model_output":
-                for content_block in step.content:
-                    if content_block.type == "text":
-                        response_text += content_block.text
-                        if content_block.annotations:
-                            for annotation in content_block.annotations:
-                                if annotation.type == "url_citation":
-                                    citations.append(f"[{annotation.title}]({annotation.url})")
-                                    
-    # หากผลลัพธ์เป็นโครงสร้าง dict หรือ JSON คล้ายโครงสร้าง API Response ดิบ
-    elif isinstance(interaction, dict):
-        steps = interaction.get("steps", [])
-        for step in steps:
-            if step.get("type") == "model_output":
-                for content_block in step.get("content", []):
-                    if content_block.get("type") == "text":
-                        response_text += content_block.get("text", "")
-                        for annotation in content_block.get("annotations", []):
-                            if annotation.get("type") == "url_citation":
-                                citations.append(f"[{annotation.get('title')}]({annotation.get('url')})")
+    fallback_response = ask_openrouter_fallback(user_prompt)
+    send_long_message(message, fallback_response)
 
-    if citations:
-        response_text += "\n\n**Citations:**\n" + "\n".join(citations)
-        
-    return response_text
+# ---------------------------------------------------------
+# Main Execution
+# ---------------------------------------------------------
+if __name__ == "__main__":
+    print("=== Starting main.py in Pure Polling Mode with Auto-Fallback ===")
+    try:
+        bot.remove_webhook()
+        time.sleep(1)
+    except Exception as e:
+        print(f"[Warning] Webhook cleanup: {e}")
 
-
-from pydantic import BaseModel, Field
-from typing import List, Optional
-
-class Recipe(BaseModel):
-    recipe_name: str = Field(description="Name of the recipe.")
-    ingredients: List[str] = Field(description="List of ingredients.")
-    prep_time_minutes: Optional[int] = Field(description="Prep time in minutes.")
-
-def generate_structured_recipe(prompt_text="Give me a recipe for banana bread"):
-    interaction = client.interactions.create(
-        model="gemini-3.6-flash",
-        input=prompt_text,
-        response_format={
-            "type": "text",
-            "mime_type": "application/json",
-            "schema": Recipe.model_json_schema()
-        }
-    )
-    recipe = Recipe.model_validate_json(interaction.output_text)
-    return recipe
-
-
-import base64
-
-def generate_futuristic_city_image():
-    interaction = client.interactions.create(
-        model="gemini-3.1-flash-image",
-        input="Generate an image of a futuristic city skyline at sunset",
-    )
-    with open("generated_image.png", "wb") as f:
-        f.write(base64.b64decode(interaction.output_image.data))
-    return "generated_image.png"
-
-
-def stream_gemini_interaction(prompt="Explain how AI works"):
-    stream = client.interactions.create(
-        model="gemini-3.6-flash",
-        input=prompt,
-        stream=True
-    )
-    results = []
-    for event in stream:
-        results.append(str(event))
-    return results
-
-
-def execute_full_flow():
-    # 1. First interaction
-    interaction1 = client.interactions.create(
-        model="gemini-3.6-flash",
-        input="I have 2 dogs in my house.",
-    )
-    print("Response 1:", interaction1.output_text)
-    
-    # 2. Second interaction using server-side state
-    interaction2 = client.interactions.create(
-        model="gemini-3.6-flash",
-        input="How many paws are in my house?",
-        previous_interaction_id=interaction1.id,
-    )
-    print("Response 2:", interaction2.output_text)
-    return interaction2.output_text
-
-
-def handle_paw_calculation_response():
-    # Response JSON data from server-side state conversation
-    response_data = {
-        "id": "v2_Chd...",
-        "status": "completed",
-        "usage": {
-            "total_tokens": 240,
-            "total_input_tokens": 60,
-            "total_output_tokens": 20
-        },
-        "steps": [
-            {
-                "type": "model_output",
-                "content": [
-                    {
-                        "type": "text",
-                        "text": "There are 8 paws in your house. 2 dogs \u00d7 4 paws = 8 paws."
-                    }
-                ]
-            }
-        ],
-        "object": "interaction",
-        "model": "gemini-3.6-flash"
-    }
-    
-    text_output = response_data["steps"][0]["content"][0]["text"]
-    print("Parsed Output:", text_output)
-    return text_output
-
-
-def explain_ai_briefly():
-    interaction = client.interactions.create(
-        model="gemini-3.6-flash",
-        input="Explain how AI works in a few words"
-    )
-    print("AI Explanation:", interaction.output_text)
-    return interaction.output_text
-
-
-def parse_brief_ai_response():
-    # Response object payload from gemini-3.6-flash
-    response_payload = {
-        "id": "v1_ChdpQUFvYXI...",
-        "status": "completed",
-        "usage": {
-            "total_tokens": 197,
-            "total_input_tokens": 8,
-            "total_output_tokens": 12
-        },
-        "created": "2026-06-09T12:01:25Z",
-        "steps": [
-            {
-                "type": "thought",
-                "signature": "EvEFCu4FAQw..."
-            },
-            {
-                "type": "model_output",
-                "content": [
-                    {
-                        "type": "text",
-                        "text": "AI learns patterns from data, then uses those patterns to make predictions or decisions on new data."
-                    }
-                ]
-            }
-        ],
-        "object": "interaction",
-        "model": "gemini-3.6-flash"
-    }
-    
-    # Extract text from model_output step
-    output_text = None
-    for step in response_payload.get("steps", []):
-        if step.get("type") == "model_output":
-            for content_item in step.get("content", []):
-                if content_item.get("type") == "text":
-                    output_text = content_item.get("text")
-                    break
-    
-    print("Extracted Text:", output_text)
-    return output_text
-
-
-import requests
-import json
-
-def run_openrouter_reasoning_flow(api_key="<OPENROUTER_API_KEY>"):
-    # First API call with reasoning enabled
-    response = requests.post(
-      url="https://openrouter.ai/api/v1/chat/completions",
-      headers={
-        "Authorization": f"Bearer {api_key}",
-        "Content-Type": "application/json",
-      },
-      data=json.dumps({
-        "model": "gemma-2-9b-it:free",
-        "messages": [
-            {
-              "role": "user",
-              "content": "How many r's are in the word 'strawberry'?"
-            }
-          ],
-        "reasoning": {"enabled": True}
-      })
-    )
-
-    res_json = response.json()
-    if 'choices' not in res_json:
-        return res_json
-        
-    msg = res_json['choices'][0]['message']
-
-    # Preserve assistant message along with reasoning_details for multi-turn reasoning
-    messages = [
-      {"role": "user", "content": "How many r's are in the word 'strawberry'?"},
-      {
-        "role": "assistant",
-        "content": msg.get('content'),
-        "reasoning_details": msg.get('reasoning_details')
-      },
-      {"role": "user", "content": "Are you sure? Think carefully."}
-    ]
-
-    # Second API call maintaining reasoning state
-    response2 = requests.post(
-      url="https://openrouter.ai/api/v1/chat/completions",
-      headers={
-        "Authorization": f"Bearer {api_key}",
-        "Content-Type": "application/json",
-      },
-      data=json.dumps({
-        "model": "gemma-2-9b-it:free",
-        "messages": messages,
-        "reasoning": {"enabled": True}
-      })
-    )
-    
-    return response2.json()
-
-
-import requests
-import json
-
-def stream_openrouter_chat(api_key="<OPENROUTER_API_KEY>"):
-    headers = {
-        "Authorization": f"Bearer {api_key}",
-        "Content-Type": "application/json",
-    }
-    payload = {
-        "model": "gemma-2-9b-it:free",
-        "stream": True,
-        "messages": [
-            {"role": "user", "content": "Hello"}
-        ]
-    }
-    
-    response = requests.post(
-        url="https://openrouter.ai/api/v1/chat/completions",
-        headers=headers,
-        data=json.dumps(payload),
-        stream=True
-    )
-    
-    chunks = []
-    for line in response.iter_lines():
-        if line:
-            decoded_line = line.decode('utf-8')
-            chunks.append(decoded_line)
-            print(decoded_line)
-            
-    return chunks
-
-
-# Equivalent Python implementation of the OpenRouter multi-turn reasoning flow provided in JavaScript
-import requests
-import json
-
-def run_js_style_openrouter_reasoning(api_key="<OPENROUTER_API_KEY>"):
-    headers = {
-        "Authorization": f"Bearer {api_key}",
-        "Content-Type": "application/json"
-    }
-    
-    # First API call with reasoning enabled
-    payload1 = {
-        "model": "gemma-2-9b-it:free",
-        "messages": [
-            {
-                "role": "user",
-                "content": "How many r's are in the word 'strawberry'?"
-            }
-        ],
-        "reasoning": {"enabled": True}
-    }
-    
-    resp1 = requests.post(
-        url="https://openrouter.ai/api/v1/chat/completions",
-        headers=headers,
-        data=json.dumps(payload1)
-    )
-    
-    result1 = resp1.json()
-    if 'choices' not in result1:
-        return result1
-        
-    assistant_msg = result1['choices'][0]['message']
-    
-    # Preserve assistant message with reasoning_details
-    messages = [
-        {
-            "role": "user",
-            "content": "How many r's are in the word 'strawberry'?"
-        },
-        {
-            "role": "assistant",
-            "content": assistant_msg.get('content'),
-            "reasoning_details": assistant_msg.get('reasoning_details')
-        },
-        {
-            "role": "user",
-            "content": "Are you sure? Think carefully."
-        }
-    ]
-    
-    # Second API call maintaining reasoning state
-    payload2 = {
-        "model": "gemma-2-9b-it:free",
-        "messages": messages,
-        "reasoning": {"enabled": True}
-    }
-    
-    resp2 = requests.post(
-        url="https://openrouter.ai/api/v1/chat/completions",
-        headers=headers,
-        data=json.dumps(payload2)
-    )
-    
-    return resp2.json()
-
-
-import requests
-import json
-
-def run_openrouter_curl_stream(api_key="<OPENROUTER_API_KEY>"):
-    headers = {
-        "Content-Type": "application/json",
-        "Authorization": f"Bearer {api_key}"
-    }
-    payload = {
-        "model": "gemma-2-9b-it:free",
-        "stream": True,
-        "messages": [
-            {"role": "user", "content": "Hello"}
-        ]
-    }
-    
-    response = requests.post(
-        url="https://openrouter.ai/api/v1/chat/completions",
-        headers=headers,
-        data=json.dumps(payload),
-        stream=True
-    )
-    
-    stream_output = []
-    for line in response.iter_lines():
-        if line:
-            decoded = line.decode('utf-8')
-            stream_output.append(decoded)
-            print(decoded)
-            
-    return stream_output
-
-
-# Python equivalent of the OpenRouter SDK streaming snippet with reasoning tokens extraction
-import requests
-import json
-
-def run_openrouter_sdk_style_stream(api_key="<OPENROUTER_API_KEY>"):
-    headers = {
-        "Authorization": f"Bearer {api_key}",
-        "Content-Type": "application/json"
-    }
-    payload = {
-        "model": "gemma-2-9b-it:free",
-        "messages": [
-            {
-                "role": "user",
-                "content": "How many r's are in the word 'strawberry'?"
-            }
-        ],
-        "stream": True,
-        "reasoning": {"enabled": True}
-    }
-    
-    response = requests.post(
-        url="https://openrouter.ai/api/v1/chat/completions",
-        headers=headers,
-        data=json.dumps(payload),
-        stream=True
-    )
-    
-    full_response = ""
-    reasoning_tokens = None
-    
-    for line in response.iter_lines():
-        if line:
-            line_str = line.decode('utf-8')
-            if line_str.startswith("data: "):
-                data_str = line_str[6:].strip()
-                if data_str == "[DONE]":
-                    break
-                try:
-                    chunk = json.loads(data_str)
-                    choices = chunk.get("choices", [])
-                    if choices:
-                        delta = choices[0].get("delta", {})
-                        content_piece = delta.get("content")
-                        if content_piece:
-                            full_response += content_piece
-                            print(content_piece, end="", flush=True)
-                            
-                    if "usage" in chunk and chunk["usage"]:
-                        details = chunk["usage"].get("completion_tokens_details")
-                        if details:
-                            reasoning_tokens = details.get("reasoning_tokens")
-                except json.JSONDecodeError:
-                    pass
-                    
-    if reasoning_tokens is not None:
-        print(f"\nReasoning tokens: {reasoning_tokens}")
-        
-    return {"response": full_response, "reasoning_tokens": reasoning_tokens}
+    bot.infinity_polling(skip_pending=True)
