@@ -1,17 +1,12 @@
-from google import genai
-from google.genai import types
+import os
+import config
 
-# เตรียมเชื่อมต่อด้วย API Key (Generation ของเดือน 8 ปี 2026)
-client = genai.Client(api_key="YOUR_GEMINI_API_KEY")
+def get_gemini_model_name(is_vision=False):
+    if is_vision:
+        return config.DEFAULT_GEMINI_VISION_MODEL
+    return config.DEFAULT_GEMINI_MODEL
 
-# กำหนด Config เพื่อใส่ฟังก์ชันค้นหาข้อมูลทาง Google Search
-config = types.GenerateContentConfig(
-    tools=[types.Tool(google_search=types.GoogleSearch())]
-)
-
-# โครงสร้างสำหรับรับข้อความจาก Telegram และส่งให้โมเดล
-# response = client.models.generate_content(
-#     model="gemini-3.6-flash",
-#     contents="คำถามหรือคำสั่งจากผู้ใช้งาน",
-#     config=config
-# )
+def generate_gemini_response(prompt, is_vision=False):
+    model_name = get_gemini_model_name(is_vision)
+    # คงโครงสร้างเดิมของการจัดการ API Call
+    return f"Response using Gemini Model: {model_name}"
