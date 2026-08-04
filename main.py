@@ -95,20 +95,30 @@ def handle_text_message(message):
     # 2. Fallback Model: OpenRouter Llama 3.1 8B Instruct
     bot.reply_to(
         message, 
-        "⚠️ [Notice]: Gemini Quota/Rate Limit Exceeded (429). Switching to OpenRouter (Llama 3.1 8B Instruct)..."
+        "⚠️ [Notice]: Gemini API Error/Rate Limit. Switching to OpenRouter (Llama 3.1 8B Instruct)..."
     )
     fallback_response = ask_openrouter_fallback(user_prompt)
     send_long_message(message, fallback_response)
 
 # ---------------------------------------------------------
-# Main Execution
+# Main Execution with Resilient Polling Loop
 # ---------------------------------------------------------
 if __name__ == "__main__":
-    print("=== Starting main.py in Pure Polling Mode with Auto-Fallback ===")
+    print("=== Starting main.py in Pure Polling Mode with Robust Retry Loop ===")
+    
+    # เคลียร์ Webhook ตกค้าง
     try:
         bot.remove_webhook()
-        time.sleep(1)
+        time.sleep(2)
     except Exception as e:
         print(f"[Warning] Webhook cleanup: {e}")
 
-    bot.infinity_polling(skip_pending=True)
+    # Resilience Polling Loop ป้องกันบอทดับจาก 409 Conflict ช่วง Startup
+    while True:
+        try:
+            print("[INFO] TeleBot starting infinity_polling...")
+            bot.infinity_polling(timeout=20, long_polling_timeout=10)
+        except Exception as e:
+            print(f"[Polling Error Caught]: {e}")
+            print("[INFO] Waiting 5 seconds before reconnecting...")
+            time.sleep(5)
