@@ -1,5 +1,6 @@
 import os
 from dispatcher import execute_task
+from handlers.voice_handler import handle as handle_voice
 import threading
 from flask import Flask
 import telebot
@@ -40,6 +41,14 @@ def handle_message(message):
 # ==========================================
 # 6. รันระบบ Multi-Threading (ล้าง Webhook ป้องกัน Error 409)
 # ==========================================
+
+
+@bot.message_handler(content_types=['voice','audio'])
+def receive_voice(message):
+    reply = handle_voice(bot, message)
+    bot.reply_to(message, reply)
+
+
 def run_bot():
     try:
         print("Clearing old webhooks...")
