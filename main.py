@@ -88,11 +88,17 @@ def safe_send_text(bot, chat_id, text, reply_to_message=None, **kwargs):
             with open(path, "rb") as fh:
                 return bot.send_document(chat_id, fh, caption="ผลลัพธ์ (ไฟล์แนบ)")
         raise
-    bot_thread = threading.Thread(target=run_bot, daemon=True)
-    bot_thread.start()
+            bot_thread = threading.Thread(target=run_bot, daemon=True)
+            bot_thread.start()
 
-    port = int(os.environ.get("PORT", 10000))
-    app.run(host="0.0.0.0", port=port)
+            port = int(os.environ.get("PORT", 10000))
+    def run_bot():
+            bot.infinity_polling()
+
+            threading.Thread(target=run_bot).start()
+
+            app.run(host="0.0.0.0", port=10000)
     
     print("Bot Started")
+    
     
