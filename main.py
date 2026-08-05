@@ -112,6 +112,8 @@ def safe_send_text(bot, chat_id, text, reply_to_message=None, **kwargs):
     if __name__ == "__main__":
             app.run(host="0.0.0.0", port=10000)
         
+            app.run()
+        
             
         print("Bot Started")
 
