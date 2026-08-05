@@ -1,17 +1,19 @@
 import json
 import logging
 import requests
+import time
 import config
 
 OPENROUTER_URL = "https://openrouter.ai/api/v1/chat/completions"
 
 
-def generate_openrouter_response(prompt, is_x_search=False):
-    """Call OpenRouter REST API using the OpenRouter endpoint described in the project docs.
+def generate_openrouter_response(prompt, is_x_search=False, retries=2):
+    """Call OpenRouter REST API using JSON payload per the provided docs.
 
     Uses config.DEFAULT_OPENROUTER_MODEL by default (set to openrouter/free),
     or config.DEFAULT_X_SEARCH_MODEL when is_x_search is True.
-    Returns a safe stripped string on success or an empty string on failure.
+    Implements simple retry with exponential backoff and redacted logging.
+    Returns a stripped string on success or an empty string on failure.
     """
     model = config.DEFAULT_X_SEARCH_MODEL if is_x_search else config.DEFAULT_OPENROUTER_MODEL
 
@@ -25,29 +27,35 @@ def generate_openrouter_response(prompt, is_x_search=False):
         "messages": [{"role": "user", "content": prompt}],
     }
 
-    try:
-        resp = requests.post(OPENROUTER_URL, headers=headers, data=json.dumps(payload), timeout=15)
-        if resp.status_code != 200:
-            logging.error("[OpenRouter] non-200 response: %s", resp.status_code)
-            return ""
+    timeout = 20
 
-        data = resp.json()
-        # Per the provided docs: data.choices[0].message.content
-        choices = data.get("choices") or []
-        if not choices:
-            return ""
+    for attempt in range(1, retries + 2):
+        try:
+            # Use requests.json parameter so body is sent as JSON (per docs)
+            resp = requests.post(OPENROUTER_URL, headers=headers, json=payload, timeout=timeout)
 
-        first = choices[0]
-        message = first.get("message") or {}
-        content = message.get("content")
-        if not content:
-            # Some OpenRouter responses may use 'text' or other shapes; attempt common fallbacks
-            # but do not make external assumptions beyond provided docs.
-            return ""
+            if resp.status_code != 200:
+                body_snippet = resp.text[:1000]
+                logging.error("[OpenRouter] non-200 response: %s body=%s", resp.status_code, body_snippet)
+            else:
+                data = resp.json()
+                choices = data.get("choices") or []
+                if not choices:
+                    return ""
 
-        return content.strip()
+                first = choices[0]
+                message = first.get("message") or {}
+                content = message.get("content")
+                if not content:
+                    return ""
 
-    except Exception as e:
-        # Redact details: log only short exception message
-        logging.error("[OpenRouter] API error: %s", str(e)[:200])
-        return ""
+                return content.strip()
+
+        except Exception as e:
+            logging.error("[OpenRouter] exception attempt %d: %s", attempt, str(e)[:300])
+
+        # Backoff before next attempt
+        if attempt <= retries:
+            time.sleep(2 ** attempt)
+
+    return ""
