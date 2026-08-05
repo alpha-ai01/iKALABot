@@ -5,6 +5,9 @@ import threading
 from flask import Flask
 import telebot
 
+# import safe_send_text helper
+from ai.telegram_utils import safe_send_text
+
 # ==========================================
 # 1. ตั้งค่า Flask Server (สำหรับ Render Health Check)
 # ==========================================
@@ -36,7 +39,8 @@ def handle_message(message):
         print(f"[Chat Action Error]: {e}")
 
     reply = execute_task('chat', message.text)
-    bot.reply_to(message, reply)
+    # Use safe_send_text to handle long replies and fallback to file when needed
+    safe_send_text(bot, message.chat.id, reply, reply_to_message=message)
 
 # ==========================================
 # 6. รันระบบ Multi-Threading (ล้าง Webhook ป้องกัน Error 409)
@@ -46,7 +50,8 @@ def handle_message(message):
 @bot.message_handler(content_types=['voice','audio'])
 def receive_voice(message):
     reply = handle_voice(bot, message)
-    bot.reply_to(message, reply)
+    # Use safe_send_text for voice replies as well
+    safe_send_text(bot, message.chat.id, reply, reply_to_message=message)
 
 
 def run_bot():
