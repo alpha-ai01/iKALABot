@@ -4,6 +4,7 @@ from handlers.voice_handler import handle as handle_voice
 import threading
 from flask import Flask
 import telebot
+import tempfile
 
 # ==========================================
 # 1. ตั้งค่า Flask Server (สำหรับ Render Health Check)
@@ -59,6 +60,33 @@ def run_bot():
         print(f"[Polling Error]: {e}")
 
 if __name__ == "__main__":
+
+    from telebot.apihelper import ApiTelegramException
+
+MAX_TG_LEN = 4000
+
+def _chunks(s, n):
+    for i in range(0, len(s), n):
+        yield s[i:i+n]
+
+def safe_send_text(bot, chat_id, text, reply_to_message=None, **kwargs):
+    try:
+        if len(text) <= MAX_TG_LEN:
+            return bot.send_message(chat_id, text, reply_to_message=reply_to_message, **kwargs)
+        # ถ้าไม่เกินจำนวนชิ้นที่รับได้ ให้แยกส่ง
+        for part in _chunks(text, MAX_TG_LEN):
+            bot.send_message(chat_id, part, reply_to_message=reply_to_message, **kwargs)
+        return True
+    except ApiTelegramException as e:
+        # ถ้าเกิดข้อผิดพลาดเกี่ยวกับความยาวอีกครั้ง ให้ส่งเป็นไฟล์แทน
+        err = str(e)
+        if "message is too long" in err.lower():
+            with tempfile.NamedTemporaryFile("w+", suffix=".txt", delete=False) as f:
+                f.write(text)
+                path = f.name
+            with open(path, "rb") as fh:
+                return bot.send_document(chat_id, fh, caption="ผลลัพธ์ (ไฟล์แนบ)")
+        raise
     bot_thread = threading.Thread(target=run_bot, daemon=True)
     bot_thread.start()
 
