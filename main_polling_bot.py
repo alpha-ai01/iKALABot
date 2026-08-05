@@ -1,6 +1,7 @@
 import os
 import telebot
 import config
+import json
 from dispatcher import execute_task
 from ai.gemini_api import generate_gemini_response
 
