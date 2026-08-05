@@ -99,6 +99,21 @@ def safe_send_text(bot, chat_id, text, reply_to_message=None, **kwargs):
 
             app.run(host="0.0.0.0", port=10000)
     
-    print("Bot Started")
+            
+       
+    from flask import Flask
+            app = Flask(__name__)
+
+            @app.route("/")
+    def home():
+       
+        return "Bot Running"
+
+    if __name__ == "__main__":
+            app.run(host="0.0.0.0", port=10000)
+        
+            
+        print("Bot Started")
+
     
     
