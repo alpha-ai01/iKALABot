@@ -93,3 +93,6 @@ def safe_send_text(bot, chat_id, text, reply_to_message=None, **kwargs):
 
     port = int(os.environ.get("PORT", 10000))
     app.run(host="0.0.0.0", port=port)
+    
+    print("Bot Started")
+    
