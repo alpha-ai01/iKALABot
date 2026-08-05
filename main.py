@@ -21,47 +21,71 @@ def health_check():
 # 2. Telegram
 # ==========================================
 BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
+bot = None
 
-bot = telebot.TeleBot(BOT_TOKEN)
+if BOT_TOKEN:
+    bot = telebot.TeleBot(BOT_TOKEN)
 
-# ==========================================
-# 5. Telegram Message Handlers
-# ==========================================
-@bot.message_handler(commands=['start', 'help'])
-def send_welcome(message):
-    bot.reply_to(message, "สวัสดีครับ iKALABot พร้อมทำงานแล้วครับ!")
+    # ==========================================
+    # Telegram Message Handlers (registered only when bot is available)
+    # ==========================================
+    @bot.message_handler(commands=['start', 'help'])
+    def send_welcome(message):
+        # short welcome message is safe to send directly
+        safe_send_text(bot, message.chat.id, "สวัสดีครับ iKALABot พร้อมทำงานแล้วครับ!", reply_to_message=message)
 
-@bot.message_handler(func=lambda message: True)
-def handle_message(message):
-    try:
-        bot.send_chat_action(message.chat.id, 'typing')
-    except Exception as e:
-        print(f"[Chat Action Error]: {e}")
+    @bot.message_handler(func=lambda message: True)
+    def handle_message(message):
+        try:
+            bot.send_chat_action(message.chat.id, 'typing')
+        except Exception as e:
+            print(f"[Chat Action Error]: {e}")
 
-    reply = execute_task('chat', message.text)
-    # Use safe_send_text to handle long replies and fallback to file when needed
-    safe_send_text(bot, message.chat.id, reply, reply_to_message=message)
+        try:
+            reply = execute_task('chat', message.text)
+        except Exception as e:
+            reply = "เกิดข้อผิดพลาดขณะประมวลผลคำขอของคุณ"
+            print(f"[Execute Task Error]: {e}")
 
-# ==========================================
-# 6. รันระบบ Multi-Threading (ล้าง Webhook ป้องกัน Error 409)
-# ==========================================
+        # Use safe_send_text to handle long replies and fallback to file when needed
+        safe_send_text(bot, message.chat.id, reply, reply_to_message=message)
 
+    @bot.message_handler(content_types=['voice', 'audio'])
+    def receive_voice(message):
+        try:
+            reply = handle_voice(bot, message)
+        except Exception as e:
+            reply = "เกิดข้อผิดพลาดขณะประมวลผลเสียงของคุณ"
+            print(f"[Voice Handler Error]: {e}")
 
-@bot.message_handler(content_types=['voice','audio'])
-def receive_voice(message):
-    reply = handle_voice(bot, message)
-    # Use safe_send_text for voice replies as well
-    safe_send_text(bot, message.chat.id, reply, reply_to_message=message)
+        # Use safe_send_text for voice replies as well
+        safe_send_text(bot, message.chat.id, reply, reply_to_message=message)
 
 
 def run_bot():
-    try:
-        print("Clearing old webhooks...")
-        bot.remove_webhook()
-        print("Starting Telegram Bot Polling...")
-        bot.infinity_polling(timeout=10, long_polling_timeout=5, skip_pending=True)
-    except Exception as e:
-        print(f"[Polling Error]: {e}")
+    # If bot is not configured, skip polling but keep Flask health check running
+    if not bot:
+        print("[INFO] TELEGRAM_BOT_TOKEN not set. Telegram bot disabled; running health check only.")
+        return
+
+    # resilient polling loop: restart polling on unexpected exceptions
+    import time
+    while True:
+        try:
+            try:
+                print("Clearing old webhooks...")
+                bot.remove_webhook()
+            except Exception as e:
+                # non-fatal; continue to polling
+                print(f"[Webhook clear warning]: {e}")
+
+            print("Starting Telegram Bot Polling...")
+            bot.infinity_polling(timeout=10, long_polling_timeout=5, skip_pending=True)
+        except Exception as e:
+            print(f"[Polling Error]: {e}")
+            # small delay before retrying to avoid tight crash loops
+            time.sleep(5)
+
 
 if __name__ == "__main__":
     bot_thread = threading.Thread(target=run_bot, daemon=True)
