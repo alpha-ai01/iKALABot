@@ -3,8 +3,6 @@ pyTelegramBotAPI-4.36.0
 openai
 google-genai
 pyTelegramBotAPI
-google-genai
-openai
 Pillow
 gTTS
 requests
