@@ -37,7 +37,8 @@ def handle_message(message):
         print(f"[Chat Action Error]: {e}")
 
     reply = execute_task('chat', message.text)
-    bot.reply_to(message, reply)
+    safe_send_text(bot, message.chat.id, reply, reply_to_message=message)
+    
 
 # ==========================================
 # 6. รันระบบ Multi-Threading (ล้าง Webhook ป้องกัน Error 409)
