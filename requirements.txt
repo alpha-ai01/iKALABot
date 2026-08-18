@@ -1,9 +1,7 @@
-pyTelegramBotAPI-4.36.0
+pyTelegramBotAPI==4.36.0
 openai
 google-genai
-pyTelegramBotAPI
 Pillow
 gTTS
 requests
-openai
 flask
