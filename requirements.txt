@@ -5,3 +5,5 @@ Pillow
 gTTS
 requests
 flask
+pytz
+duckduckgo-search

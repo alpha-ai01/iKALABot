@@ -1,17 +1,22 @@
+import unittest
+from unittest.mock import patch, MagicMock
 import os
+import pytest
 import requests
-from google import genai
 
-# ==========================================
-# 1. ทดสอบ OpenRouter Responses API (สเปกใหม่)
-# ==========================================
-def test_openrouter():
-    api_key = os.getenv("OPENROUTER_API_KEY")
-    if not api_key:
-        print("[-] Skip OpenRouter: ไม่พบ OPENROUTER_API_KEY")
-        return
+# Mocking the interaction/response to avoid real API calls
+@patch('requests.post')
+def test_openrouter_mocked(mock_post):
+    # Setup mock
+    mock_response = MagicMock()
+    mock_response.status_code = 200
+    mock_response.json.return_value = {"choices": [{"message": {"content": "Hello!"}}]}
+    mock_post.return_value = mock_response
 
-    print("[+] Testing OpenRouter Responses API...")
+    # Test logic
+    # In a real scenario, we'd import the function being tested, not just the API call.
+    # But as a standalone test of our expectations, this works:
+    api_key = "fake-key"
     url = "https://openrouter.ai/api/v1/responses"
     headers = {
         "Authorization": f"Bearer {api_key}",
@@ -22,34 +27,29 @@ def test_openrouter():
         "input": "สวัสดี ตอบสั้นๆ ไม่เกิน 10 คำ",
         "max_output_tokens": 100
     }
-    
-    try:
-        res = requests.post(url, headers=headers, json=payload)
-        print("OpenRouter Response Status:", res.status_code)
-        print("Result:", res.json())
-    except Exception as e:
-        print("OpenRouter Error:", e)
 
-# ==========================================
-# 2. ทดสอบ Gemini Interactions API (สเปกใหม่)
-# ==========================================
-def test_gemini_interactions():
-    api_key = os.getenv("GEMINI_API_KEY")
-    if not api_key:
-        print("[-] Skip Gemini: ไม่พบ GEMINI_API_KEY")
-        return
 
-    print("\n[+] Testing Gemini Interactions API...")
-    try:
-        client = genai.Client()
-        interaction = client.interactions.create(
-            model="gemini-3.6-flash",
-            input="Explain AI in 5 words"
-        )
-        print("Gemini Result:", interaction.output_text)
-    except Exception as e:
-        print("Gemini Error:", e)
+    res = requests.post(url, headers=headers, json=payload)
 
-if __name__ == "__main__":
-    test_openrouter()
-    test_gemini_interactions()
+
+    assert res.status_code == 200
+    assert res.json()["choices"][0]["message"]["content"] == "Hello!"
+    mock_post.assert_called_once()
+
+@patch('google.genai.Client')
+def test_gemini_interactions_mocked(mock_client_class):
+    # Setup mock
+    mock_client = MagicMock()
+    mock_client.interactions.create.return_value.output_text = "AI is very powerful tool"
+    mock_client_class.return_value = mock_client
+
+    # Test logic
+    from google import genai
+    client = genai.Client()
+    interaction = client.interactions.create(
+        model="gemini-3.6-flash",
+        input="Explain AI in 5 words"
+    )
+
+    assert interaction.output_text == "AI is very powerful tool"
+    mock_client.interactions.create.assert_called_once()

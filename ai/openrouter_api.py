@@ -2,8 +2,6 @@ import json
 import logging
 import requests
 import config
-import requests
-import config
 from utils.logger import logger
 
 def ask_openrouter(prompt: str) -> str:

@@ -1,11 +1,16 @@
 import logging
-from google import genai
 import config
 
-# Initialize Gemini client using config (read from environment via config)
-client = genai.Client(
-    api_key=config.GEMINI_API_KEY
-)
+_client = None
+
+def get_client():
+    global _client
+    if _client is None:
+        from google import genai
+        if not config.GEMINI_API_KEY:
+            raise ValueError("GEMINI_API_KEY is not set.")
+        _client = genai.Client(api_key=config.GEMINI_API_KEY)
+    return _client
 
 
 def _prepare_contents(prompt):
@@ -27,7 +32,7 @@ def generate_gemini_response(prompt, is_vision=False):
     contents = _prepare_contents(prompt)
 
     try:
-        response = client.models.generate_content(
+        response = get_client().models.generate_content(
             model=model,
             contents=contents,
         )
