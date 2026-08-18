@@ -13,15 +13,21 @@ def get_client():
     return _client
 
 
-def _prepare_contents(prompt):
-    """Prepare contents in a format compatible with the genai SDK.
-    If prompt is already a list/dict (pre-built content), return it unchanged.
-    Otherwise wrap the string prompt into the expected parts structure.
-    """
+def _prepare_contents(prompt, is_vision=False):
+    """Prepare contents in a format compatible with the genai SDK."""
     if isinstance(prompt, (list, dict)):
         return prompt
 
-    return [{"parts": [{"text": prompt}]}]
+    from google.genai import types
+    if is_vision and isinstance(prompt, bytes):
+         # Assuming mime_type is image/jpeg or similar; need a generic approach
+         # or handle it appropriately if it's audio.
+         # The voice handler calls this with is_vision=True and bytes.
+         return [types.Content(parts=[
+             types.Part.from_bytes(data=prompt, mime_type="audio/ogg")
+         ])]
+    
+    return [types.Content(parts=[types.Part.from_text(text=prompt)])]
 
 
 def generate_gemini_response(prompt, is_vision=False):
@@ -29,7 +35,7 @@ def generate_gemini_response(prompt, is_vision=False):
         config.DEFAULT_GEMINI_VISION_MODEL if is_vision else config.DEFAULT_GEMINI_MODEL
     )
 
-    contents = _prepare_contents(prompt)
+    contents = _prepare_contents(prompt, is_vision=is_vision)
 
     try:
         response = get_client().models.generate_content(
