@@ -89,7 +89,8 @@ def init_handlers(bot_instance):
             
             logging.info("VISION_START")
             from ai.gemini_api import generate_gemini_response
-            response = generate_gemini_response(downloaded_file, is_vision=True)
+            # mime_type is usually image/jpeg for Telegram photos
+            response = generate_gemini_response(downloaded_file, is_vision=True, mime_type="image/jpeg")
             
             if not response:
                 logging.info("VISION_EMPTY")

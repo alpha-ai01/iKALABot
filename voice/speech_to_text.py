@@ -16,15 +16,20 @@ def get_client():
 def speech_to_text(audio_bytes):
     model = config.DEFAULT_GEMINI_MODEL
     from google.genai import types
+    import logging
+
+    logging.info("VOICE_MIME=audio/ogg")
+    logging.info("VOICE_BYTES_LEN=%d", len(audio_bytes))
+    logging.info("VOICE_STT_PROVIDER=gemini")
+    logging.info("VOICE_STT_MODEL=%s", model)
 
     response = get_client().models.generate_content(
         model=model,
         contents=[
-            types.Content(parts=[
-                types.Part.from_text(text="ถอดข้อความจากไฟล์เสียงนี้เป็นข้อความเท่านั้น"),
-                types.Part.from_bytes(data=audio_bytes, mime_type="audio/ogg")
-            ])
+            types.Part.from_text(text="ถอดข้อความจากไฟล์เสียงนี้เป็นข้อความเท่านั้น ตอบเฉพาะข้อความที่ถอดได้"),
+            types.Part.from_bytes(data=audio_bytes, mime_type="audio/ogg")
         ],
     )
 
+    logging.info("VOICE_STT_OK")
     return (response.text or "").strip()
