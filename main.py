@@ -1,9 +1,8 @@
 import os
 import threading
 import telebot
-from flask import Flask
-from dispatcher import execute_task
-from handlers.voice_handler import handle as handle_voice
+from flask import Flask, jsonify
+from handlers.message_handler import init_handlers
 
 # ==========================================
 # 1. Flask Health Check Server
@@ -11,24 +10,52 @@ from handlers.voice_handler import handle as handle_voice
 app = Flask(__name__)
 
 @app.route('/')
-def health_check():
+def root():
     return "iKALABot is running live!", 200
 
+@app.route('/health')
+def health_check():
+    return jsonify({
+        "status": "ok",
+        "service": "iKALABot"
+    }), 200
+
 # ==========================================
-# 2. Telegram Bot
+# 2. Telegram Bot Setup
 # ==========================================
-if __name__ == "__main__":
+def run_bot(token):
+    bot = telebot.TeleBot(token)
+    init_handlers(bot)
+
+    try:
+        print("Clearing old webhooks...")
+        bot.remove_webhook()
+        print("Starting Telegram Bot Polling...")
+        bot.infinity_polling(timeout=10, long_polling_timeout=5, skip_pending=True)
+    except Exception as e:
+        print(f"[Polling Error]: {e}")
+
+def run_web(port):
+    # Disable reloader to prevent double polling
+    app.run(host="0.0.0.0", port=port, debug=False, use_reloader=False)
+
+def main():
     BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
-    if not BOT_TOKEN:
-        raise ValueError("TELEGRAM_BOT_TOKEN environment variable not set")
-    bot = telebot.TeleBot(BOT_TOKEN)
-    # Start bot in a thread
-    bot_thread = threading.Thread(target=run_bot, daemon=True)
-    bot_thread.start()
-    
-    # Run Flask server in the main thread
+
+    if BOT_TOKEN:
+        # Start bot in a background thread
+        bot_thread = threading.Thread(
+            target=run_bot,
+            args=(BOT_TOKEN,),
+            name="telegram-polling",
+            daemon=True
+        )
+        bot_thread.start()
+    else:
+        print("TELEGRAM_BOT_TOKEN not set, running in HTTP-only mode")
+
     port = int(os.environ.get("PORT", 10000))
-    app.run(host="0.0.0.0", port=port)
-else:
-    # Minimal bot initialization for imports
-    bot = telebot.TeleBot("123456:dummy_token")
+    run_web(port)
+
+if __name__ == "__main__":
+    main()
