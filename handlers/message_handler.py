@@ -40,14 +40,24 @@ def init_handlers(bot_instance):
     @bot.message_handler(content_types=['voice', 'audio'])
     def handle_voice_message(message):
         try:
+            bot.send_chat_action(message.chat.id, 'typing')
             file_info = bot.get_file(message.voice.file_id if message.voice else message.audio.file_id)
             downloaded_file = bot.download_file(file_info.file_path)
-
-            # Using placeholder for now, need to check if this is correct
-            response = generate_gemini_response(downloaded_file, is_vision=True)
+            
+            from voice.speech_to_text import speech_to_text
+            transcript = speech_to_text(downloaded_file)
+            
+            if not transcript:
+                bot.reply_to(message, "ขออภัยครับ ไม่สามารถถอดข้อความจากเสียงนี้ได้")
+                return
+            
+            # Now process the transcript as a text command
+            response = execute_task("chat", text=transcript)
             if not response:
-                response = "ขออภัยครับ ไม่สามารถประมวลผลข้อความเสียงนี้ได้"
-
+                response = "ขออภัยครับ ไม่เข้าใจคำสั่งในเสียง"
+                
             bot.reply_to(message, str(response))
         except Exception as e:
-            bot.reply_to(message, f"เกิดข้อผิดพลาดในการรับข้อความเสียง: {str(e)}")
+            import logging
+            logging.exception("Error in handle_voice_message")
+            bot.reply_to(message, f"เกิดข้อผิดพลาดในการรับข้อความเสียง: เกิดปัญหาภายในระบบ")
