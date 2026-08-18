@@ -17,19 +17,26 @@ def init_handlers(bot_instance):
     @bot.message_handler(func=lambda message: True)
     def handle_text(message):
         text = message.text
-        if text and any(bad in text.lower() for bad in ["fuck", "ควย", "Hia"]):
-            bot.reply_to(message, "กรุณาใช้ถ้อยคำที่สุภาพในการสนทนานะครับ หากคุณมีคำถามหรือต้องการความช่วยเหลือ สามารถสอบถาม iKALABot ได้เลยครับ ยินดีให้บริการครับ")
+        if not text:
             return
+
+        # Simple classification
+        task = "chat"
+        kwargs = {}
+
+        if any(keyword in text.lower() for keyword in ["กี่โมง", "วันที่", "time", "date"]):
+            task = "time"
+        elif "ค้นหา" in text:
+            task = "search"
 
         try:
             bot.send_chat_action(message.chat.id, 'typing')
-            response = execute_task("search", prompt=text)
+            response = execute_task(task, text=text, **kwargs)
             if not response:
-                response = generate_gemini_response(text)
+                response = "ขออภัยครับ ไม่เข้าใจคำสั่ง"
             bot.reply_to(message, str(response))
         except Exception as e:
             bot.reply_to(message, f"เกิดข้อผิดพลาด: {str(e)}")
-
     @bot.message_handler(content_types=['voice', 'audio'])
     def handle_voice_message(message):
         try:

@@ -7,3 +7,6 @@ requests
 flask
 pytz
 duckduckgo-search
+pypdf
+python-docx
+openpyxl
