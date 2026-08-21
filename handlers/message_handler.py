@@ -105,7 +105,10 @@ def init_handlers(bot_instance):
     @bot.message_handler(content_types=['photo'])
     def handle_photo_message(message):
         import logging
+        import os
         from utils.text_utils import clean_ai_response
+        from voice.text_to_speech import text_to_speech
+        
         logging.info("PHOTO_RECEIVED: chat_id=%s", message.chat.id)
         try:
             bot.send_chat_action(message.chat.id, 'typing')
@@ -130,6 +133,24 @@ def init_handlers(bot_instance):
             clean_response = clean_ai_response(str(response))
             bot.reply_to(message, clean_response)
             logging.info("PHOTO_REPLY_OK")
+
+            # TTS and send voice
+            logging.info("[Voice] TTS started")
+            audio_path = text_to_speech(clean_response)
+            
+            if audio_path:
+                logging.info("[Voice] Sending voice to Telegram")
+                with open(audio_path, "rb") as audio:
+                    bot.send_voice(message.chat.id, audio)
+                logging.info("[Voice] Voice sent successfully")
+                
+                # Cleanup
+                if os.path.exists(audio_path):
+                    os.remove(audio_path)
+                    logging.info("[Voice] Temporary file removed")
+            else:
+                logging.info("[Voice] Sending text fallback")
+
         except Exception as e:
             logging.exception("VISION_FAILED: Error in handle_photo_message")
             bot.reply_to(message, f"เกิดข้อผิดพลาดในการรับภาพ: เกิดปัญหาภายในระบบ")
