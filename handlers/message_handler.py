@@ -16,6 +16,7 @@ def init_handlers(bot_instance):
 
     @bot.message_handler(func=lambda message: True, content_types=['text'])
     def handle_text(message):
+        from utils.text_utils import clean_ai_response
         text = message.text
         if not text:
             return
@@ -34,7 +35,9 @@ def init_handlers(bot_instance):
             response = execute_task(task, text=text, **kwargs)
             if not response:
                 response = "ขออภัยครับ ไม่เข้าใจคำสั่ง"
-            bot.reply_to(message, str(response))
+            
+            clean_response = clean_ai_response(str(response))
+            bot.reply_to(message, clean_response)
         except Exception as e:
             bot.reply_to(message, f"เกิดข้อผิดพลาด: {str(e)}")
 
@@ -43,6 +46,7 @@ def init_handlers(bot_instance):
         import logging
         import os
         from voice.text_to_speech import text_to_speech
+        from utils.text_utils import clean_ai_response
         
         logging.info("VOICE_RECEIVED: chat_id=%s", message.chat.id)
         try:
@@ -70,14 +74,16 @@ def init_handlers(bot_instance):
             
             if not response:
                 response = "ขออภัยครับ ไม่เข้าใจคำสั่งในเสียง"
+            
+            clean_response = clean_ai_response(str(response))
                 
             # Send text response
-            bot.reply_to(message, str(response))
+            bot.reply_to(message, clean_response)
             logging.info("VOICE_REPLY_OK")
             
             # TTS and send voice
             logging.info("[Voice] TTS started")
-            audio_path = text_to_speech(str(response))
+            audio_path = text_to_speech(clean_response)
             
             if audio_path:
                 logging.info("[Voice] Sending voice to Telegram")
