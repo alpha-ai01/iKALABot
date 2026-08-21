@@ -22,12 +22,20 @@ def speech_to_text(audio_bytes):
     logging.info("[Voice] Gemini request started")
     
     try:
+        from google.genai import types
+        
+        # Disable automatic function calling as per SDK recommendation for generate_content
+        config_afc = types.AutomaticFunctionCallingConfig(disable=True)
+        
         response = get_client().models.generate_content(
             model=model,
             contents=[
                 types.Part.from_text(text="ถอดข้อความจากไฟล์เสียงนี้เป็นข้อความเท่านั้น ตอบเฉพาะข้อความที่ถอดได้"),
                 types.Part.from_bytes(data=audio_bytes, mime_type="audio/ogg")
             ],
+            config=types.GenerateContentConfig(
+                automatic_function_calling=config_afc
+            )
         )
         logging.info("[Voice] Gemini response success")
         return (response.text or "").strip()

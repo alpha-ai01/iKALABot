@@ -32,9 +32,17 @@ def generate_gemini_response(prompt_data, is_vision=False, mime_type="image/jpeg
 
     try:
         logging.info("[Gemini] Trying model: %s", model)
+        from google.genai import types
+        
+        # Disable automatic function calling as per SDK recommendation for generate_content
+        config_afc = types.AutomaticFunctionCallingConfig(disable=True)
+        
         response = get_client().models.generate_content(
             model=model,
             contents=contents,
+            config=types.GenerateContentConfig(
+                automatic_function_calling=config_afc
+            )
         )
         logging.info("[Gemini] Success")
         return (response.text or "").strip()
