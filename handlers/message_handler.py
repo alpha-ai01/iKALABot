@@ -41,6 +41,9 @@ def init_handlers(bot_instance):
     @bot.message_handler(content_types=['voice', 'audio'])
     def handle_voice_message(message):
         import logging
+        import os
+        from voice.text_to_speech import text_to_speech
+        
         logging.info("VOICE_RECEIVED: chat_id=%s", message.chat.id)
         try:
             bot.send_chat_action(message.chat.id, 'typing')
@@ -68,8 +71,27 @@ def init_handlers(bot_instance):
             if not response:
                 response = "ขออภัยครับ ไม่เข้าใจคำสั่งในเสียง"
                 
+            # Send text response
             bot.reply_to(message, str(response))
             logging.info("VOICE_REPLY_OK")
+            
+            # TTS and send voice
+            logging.info("[Voice] TTS started")
+            audio_path = text_to_speech(str(response))
+            
+            if audio_path:
+                logging.info("[Voice] Sending voice to Telegram")
+                with open(audio_path, "rb") as audio:
+                    bot.send_voice(message.chat.id, audio)
+                logging.info("[Voice] Voice sent successfully")
+                
+                # Cleanup
+                if os.path.exists(audio_path):
+                    os.remove(audio_path)
+                    logging.info("[Voice] Temporary file removed")
+            else:
+                logging.info("[Voice] Sending text fallback")
+                
         except Exception as e:
             logging.exception("VOICE_STT_FAILED: Error in handle_voice_message")
             bot.reply_to(message, f"เกิดข้อผิดพลาดในการรับข้อความเสียง: เกิดปัญหาภายในระบบ")
