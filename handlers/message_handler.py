@@ -105,6 +105,7 @@ def init_handlers(bot_instance):
     @bot.message_handler(content_types=['photo'])
     def handle_photo_message(message):
         import logging
+        from utils.text_utils import clean_ai_response
         logging.info("PHOTO_RECEIVED: chat_id=%s", message.chat.id)
         try:
             bot.send_chat_action(message.chat.id, 'typing')
@@ -126,7 +127,8 @@ def init_handlers(bot_instance):
                 return
             
             logging.info("VISION_OK")
-            bot.reply_to(message, str(response))
+            clean_response = clean_ai_response(str(response))
+            bot.reply_to(message, clean_response)
             logging.info("PHOTO_REPLY_OK")
         except Exception as e:
             logging.exception("VISION_FAILED: Error in handle_photo_message")
