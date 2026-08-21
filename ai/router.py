@@ -1,4 +1,5 @@
 import logging
+import config
 from ai.gemini_api import generate_gemini_response
 from ai.openrouter_api import generate_openrouter_response
 
@@ -21,62 +22,35 @@ def route_request(
     is_vision=False,
     is_x_search=False,
 ):
-    """Route request to the selected provider.
+    """Route request to the selected provider using the fallback strategy.
 
-    Behavior:
-    - If provider explicitly set to 'gemini' or 'openrouter', call that provider only.
-    - If provider == 'auto', prefer OpenRouter (configured to openrouter/free) first,
-      with a single retry on transient failure, then fall back to Gemini with a retry.
+    Strategy:
+    1. Gemini 3.5 Flash (config.GEMINI_MODEL)
+    2. OpenRouter (config.OPENROUTER_MODEL)
+    3. Gemini 3.5 Flash-Lite (config.GEMINI_FALLBACK_MODEL)
 
-    Returns: string response (empty string on failure)
+    Returns: string response (empty string on final failure)
     """
-    # Explicit provider selected
-    if provider == "gemini":
-        try:
-            return generate_gemini_response(prompt, is_vision=is_vision)
-        except Exception as e:
-            logging.error("[Router] Gemini error: %s", _redact_exception(e))
-            return ""
+    logging.info("[Router] Starting AI request")
 
-    if provider == "openrouter":
-        try:
-            return generate_openrouter_response(prompt, is_x_search=is_x_search)
-        except Exception as e:
-            logging.error("[Router] OpenRouter error: %s", _redact_exception(e))
-            return ""
+    # 1. Try Gemini 3.5 Flash
+    response = generate_gemini_response(prompt, is_vision=is_vision, model_override=config.GEMINI_MODEL)
+    if response:
+        return response
 
-    # Auto routing: prefer OpenRouter (free) then Gemini
-    # Try OpenRouter with one retry
-    try:
-        response = generate_openrouter_response(prompt, is_x_search=is_x_search)
-        if response:
-            return response
-    except Exception as e:
-        logging.error("[Router] OpenRouter attempt failed: %s", _redact_exception(e))
+    # 2. Try OpenRouter
+    logging.info("[Router] Trying fallback provider: OpenRouter")
+    response = generate_openrouter_response(prompt, is_x_search=is_x_search)
+    if response:
+        return response
 
-    # Retry once for OpenRouter
-    try:
-        response = generate_openrouter_response(prompt, is_x_search=is_x_search)
-        if response:
-            return response
-    except Exception as e:
-        logging.error("[Router] OpenRouter retry failed: %s", _redact_exception(e))
-
-    # Fallback to Gemini with one attempt + retry
-    try:
-        response = generate_gemini_response(prompt, is_vision=is_vision)
-        if response:
-            return response
-    except Exception as e:
-        logging.error("[Router] Gemini attempt failed: %s", _redact_exception(e))
-
-    try:
-        response = generate_gemini_response(prompt, is_vision=is_vision)
-        if response:
-            return response
-    except Exception as e:
-        logging.error("[Router] Gemini retry failed: %s", _redact_exception(e))
+    # 3. Try Gemini 3.5 Flash-Lite
+    logging.info("[Router] Trying fallback provider: Gemini Lite")
+    response = generate_gemini_response(prompt, is_vision=is_vision, model_override=config.GEMINI_FALLBACK_MODEL)
+    if response:
+        return response
 
     # All attempts failed
-    logging.error("[Router] All providers failed for prompt (redacted)")
-    return ""
+    logging.error("[Router] All providers failed")
+    return "ขออภัย ระบบ AI ไม่สามารถตอบคำถามได้ในขณะนี้ กรุณาลองใหม่อีกครั้ง"
+
