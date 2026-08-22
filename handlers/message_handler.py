@@ -2,6 +2,7 @@ import telebot
 from dispatcher import execute_task
 from ai.gemini_api import generate_gemini_response
 import config
+from utils.response_manager import send_ai_response, set_voice_enabled, init_prefs_db
 
 # Bot instance will be initialized in main.py to avoid circular imports
 bot = None
@@ -9,6 +10,17 @@ bot = None
 def init_handlers(bot_instance):
     global bot
     bot = bot_instance
+    init_prefs_db()
+
+    @bot.message_handler(commands=['voice_on'])
+    def voice_on(message):
+        set_voice_enabled(message.from_user.id, True)
+        bot.reply_to(message, "เปิดใช้งานข้อความเสียงแล้วครับ")
+
+    @bot.message_handler(commands=['voice_off'])
+    def voice_off(message):
+        set_voice_enabled(message.from_user.id, False)
+        bot.reply_to(message, "ปิดใช้งานข้อความเสียงแล้วครับ")
 
     @bot.message_handler(commands=['start', 'help'])
     def send_welcome(message):
@@ -81,11 +93,11 @@ def init_handlers(bot_instance):
             if not response:
                 response = "ขออภัยครับ ไม่เข้าใจคำสั่ง"
             
-            clean_response = clean_ai_response(str(response))
-            bot.reply_to(message, clean_response)
+            # Centralized response
+            send_ai_response(bot, message, response)
             
             # 2. Evaluate and save new memory
-            manager.evaluate_and_save(user_id, chat_id, text, clean_response)
+            manager.evaluate_and_save(user_id, chat_id, text, str(response))
         except Exception as e:
             bot.reply_to(message, f"เกิดข้อผิดพลาด: {str(e)}")
 
@@ -93,8 +105,7 @@ def init_handlers(bot_instance):
     def handle_voice_message(message):
         import logging
         import os
-        from voice.text_to_speech import text_to_speech
-        from utils.text_utils import clean_ai_response
+        from voice.speech_to_text import speech_to_text
         
         logging.info("VOICE_RECEIVED: chat_id=%s", message.chat.id)
         try:
@@ -104,7 +115,6 @@ def init_handlers(bot_instance):
             downloaded_file = bot.download_file(file_info.file_path)
             logging.info("VOICE_DOWNLOAD_OK")
             
-            from voice.speech_to_text import speech_to_text
             logging.info("VOICE_STT_START")
             transcript = speech_to_text(downloaded_file)
             
@@ -123,28 +133,9 @@ def init_handlers(bot_instance):
             if not response:
                 response = "ขออภัยครับ ไม่เข้าใจคำสั่งในเสียง"
             
-            clean_response = clean_ai_response(str(response))
-                
-            # Send text response
-            bot.reply_to(message, clean_response)
+            # Centralized response
+            send_ai_response(bot, message, response)
             logging.info("VOICE_REPLY_OK")
-            
-            # TTS and send voice
-            logging.info("[Voice] TTS started")
-            audio_path = text_to_speech(clean_response)
-            
-            if audio_path:
-                logging.info("[Voice] Sending voice to Telegram")
-                with open(audio_path, "rb") as audio:
-                    bot.send_voice(message.chat.id, audio)
-                logging.info("[Voice] Voice sent successfully")
-                
-                # Cleanup
-                if os.path.exists(audio_path):
-                    os.remove(audio_path)
-                    logging.info("[Voice] Temporary file removed")
-            else:
-                logging.info("[Voice] Sending text fallback")
                 
         except Exception as e:
             logging.exception("VOICE_STT_FAILED: Error in handle_voice_message")
@@ -156,7 +147,6 @@ def init_handlers(bot_instance):
         import os
         from services.document_service import get_file_content
         from ai.gemini_api import generate_gemini_response
-        from utils.text_utils import clean_ai_response
 
         logging.info("DOCUMENT_RECEIVED: chat_id=%s", message.chat.id)
         
@@ -195,8 +185,8 @@ def init_handlers(bot_instance):
                 bot.reply_to(message, "ขออภัยครับ ไม่สามารถวิเคราะห์ไฟล์นี้ได้")
                 return
             
-            clean_response = clean_ai_response(str(response))
-            bot.reply_to(message, clean_response)
+            # Centralized response
+            send_ai_response(bot, message, response)
             
         except Exception as e:
             logging.exception("DOCUMENT_FAILED")
