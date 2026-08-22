@@ -10,4 +10,3 @@ duckduckgo-search
 pypdf
 python-docx
 openpyxl
-discord.py
