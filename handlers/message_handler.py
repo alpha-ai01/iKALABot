@@ -14,12 +14,57 @@ def init_handlers(bot_instance):
     def send_welcome(message):
         bot.reply_to(message, "สวัสดีครับ ผมคือ iKALABot ผู้ช่วยอัจฉริยะ ยินดีให้บริการครับ มีอะไรให้ผมช่วยดูแลหรือสอบถามเพิ่มเติมได้เลยครับ")
 
+    @bot.message_handler(commands=['memory'])
+    def list_memories(message):
+        from ai.memory_manager import MemoryManager
+        manager = MemoryManager()
+        memories = manager.store.list_memories(message.from_user.id, message.chat.id)
+        if not memories:
+            bot.reply_to(message, "ไม่มีความทรงจำที่ถูกบันทึกไว้ครับ")
+            return
+        
+        response = "ความทรงจำของคุณ:\n"
+        for mem in memories:
+            response += f"- ID: {mem[0]}, เนื้อหา: {mem[1][:30]}... ({mem[2]})\n"
+        bot.reply_to(message, response)
+
+    @bot.message_handler(commands=['forget'])
+    def forget_memory(message):
+        try:
+            memory_id = int(message.text.split()[1])
+            from ai.memory_manager import MemoryManager
+            manager = MemoryManager()
+            manager.store.delete_memory(message.from_user.id, message.chat.id, memory_id)
+            bot.reply_to(message, "ลบความทรงจำเรียบร้อยแล้ว")
+        except:
+            bot.reply_to(message, "กรุณาระบุ ID ความทรงจำที่ต้องการลบ เช่น /forget 1")
+
+    @bot.message_handler(commands=['forget_all'])
+    def forget_all_memories(message):
+        from ai.memory_manager import MemoryManager
+        manager = MemoryManager()
+        manager.store.clear_user_memories(message.from_user.id, message.chat.id)
+        bot.reply_to(message, "ลบความทรงจำทั้งหมดของคุณแล้ว")
+
     @bot.message_handler(func=lambda message: True, content_types=['text'])
     def handle_text(message):
         from utils.text_utils import clean_ai_response
+        from ai.memory_manager import MemoryManager
         text = message.text
         if not text:
             return
+        
+        user_id = message.from_user.id
+        chat_id = message.chat.id
+
+        # 1. Retrieve relevant memories
+        manager = MemoryManager()
+        relevant_memories = manager.get_relevant_memories(user_id, chat_id, text)
+        
+        # Add memories to context if available
+        prompt = text
+        if relevant_memories:
+            prompt = f"ความทรงจำที่เกี่ยวข้อง: {' '.join(relevant_memories)}\n\nคำถาม: {text}"
 
         # Simple classification
         task = "chat"
@@ -32,12 +77,15 @@ def init_handlers(bot_instance):
 
         try:
             bot.send_chat_action(message.chat.id, 'typing')
-            response = execute_task(task, text=text, **kwargs)
+            response = execute_task(task, text=prompt, **kwargs)
             if not response:
                 response = "ขออภัยครับ ไม่เข้าใจคำสั่ง"
             
             clean_response = clean_ai_response(str(response))
             bot.reply_to(message, clean_response)
+            
+            # 2. Evaluate and save new memory
+            manager.evaluate_and_save(user_id, chat_id, text, clean_response)
         except Exception as e:
             bot.reply_to(message, f"เกิดข้อผิดพลาด: {str(e)}")
 
