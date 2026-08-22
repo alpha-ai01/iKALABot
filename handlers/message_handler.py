@@ -102,55 +102,58 @@ def init_handlers(bot_instance):
             logging.exception("VOICE_STT_FAILED: Error in handle_voice_message")
             bot.reply_to(message, f"เกิดข้อผิดพลาดในการรับข้อความเสียง: เกิดปัญหาภายในระบบ")
 
-    @bot.message_handler(content_types=['photo'])
-    def handle_photo_message(message):
+    @bot.message_handler(content_types=['document'])
+    def handle_document_message(message):
         import logging
         import os
+        from services.document_service import get_file_content
+        from ai.gemini_api import generate_gemini_response
         from utils.text_utils import clean_ai_response
-        from voice.text_to_speech import text_to_speech
+
+        logging.info("DOCUMENT_RECEIVED: chat_id=%s", message.chat.id)
         
-        logging.info("PHOTO_RECEIVED: chat_id=%s", message.chat.id)
+        file_path = None
         try:
-            bot.send_chat_action(message.chat.id, 'typing')
-            # Get the highest resolution photo
-            photo = message.photo[-1]
-            file_info = bot.get_file(photo.file_id)
-            logging.info("PHOTO_DOWNLOAD_OK")
+            bot.send_chat_action(message.chat.id, 'upload_document')
+            
+            # Get file info and download
+            file_info = bot.get_file(message.document.file_id)
+            file_extension = os.path.splitext(message.document.file_name)[1].lower()
+            temp_file_name = f"temp_{message.chat.id}_{message.document.file_id}{file_extension}"
+            
             downloaded_file = bot.download_file(file_info.file_path)
-            logging.info("PHOTO_VALIDATE_OK")
+            with open(temp_file_name, 'wb') as f:
+                f.write(downloaded_file)
+            file_path = temp_file_name
             
-            logging.info("VISION_START")
-            from ai.gemini_api import generate_gemini_response
-            # mime_type is usually image/jpeg for Telegram photos
-            response = generate_gemini_response(downloaded_file, is_vision=True, mime_type="image/jpeg")
+            logging.info("DOCUMENT_DOWNLOAD_OK: %s", temp_file_name)
             
-            if not response:
-                logging.info("VISION_EMPTY")
-                bot.reply_to(message, "ขออภัยครับ ไม่สามารถวิเคราะห์ภาพนี้ได้")
+            # Process content
+            bot.send_chat_action(message.chat.id, 'typing')
+            content, error = get_file_content(file_path)
+            
+            if error:
+                bot.reply_to(message, f"ขออภัยครับ: {error}")
                 return
             
-            logging.info("VISION_OK")
+            # Prepare prompt
+            user_query = message.caption or "ช่วยวิเคราะห์ไฟล์นี้"
+            prompt = f"ชื่อไฟล์: {message.document.file_name}\n\nเนื้อหา:\n{content}\n\nคำถาม: {user_query}"
+            
+            # Analyze
+            response = generate_gemini_response(prompt)
+            
+            if not response:
+                bot.reply_to(message, "ขออภัยครับ ไม่สามารถวิเคราะห์ไฟล์นี้ได้")
+                return
+            
             clean_response = clean_ai_response(str(response))
             bot.reply_to(message, clean_response)
-            logging.info("PHOTO_REPLY_OK")
-
-            # TTS and send voice
-            logging.info("[Voice] TTS started")
-            audio_path = text_to_speech(clean_response)
             
-            if audio_path:
-                logging.info("[Voice] Sending voice to Telegram")
-                with open(audio_path, "rb") as audio:
-                    bot.send_voice(message.chat.id, audio)
-                logging.info("[Voice] Voice sent successfully")
-                
-                # Cleanup
-                if os.path.exists(audio_path):
-                    os.remove(audio_path)
-                    logging.info("[Voice] Temporary file removed")
-            else:
-                logging.info("[Voice] Sending text fallback")
-
         except Exception as e:
-            logging.exception("VISION_FAILED: Error in handle_photo_message")
-            bot.reply_to(message, f"เกิดข้อผิดพลาดในการรับภาพ: เกิดปัญหาภายในระบบ")
+            logging.exception("DOCUMENT_FAILED")
+            bot.reply_to(message, f"เกิดข้อผิดพลาดในการประมวลผลเอกสาร")
+        finally:
+            if file_path and os.path.exists(file_path):
+                os.remove(file_path)
+                logging.info("DOCUMENT_CLEANUP_OK: %s", file_path)
