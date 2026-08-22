@@ -9,8 +9,10 @@ class ToolRouter:
             return self._handle_time(kwargs.get("timezone", "Asia/Bangkok"))
         elif task == "search":
             return tools.search_web(text)
-        elif task == "document":
-            return document_service.process_document(kwargs.get("file_path"))
+        elif task == "read_file":
+            return tools.read_file_tool(kwargs.get("file_path"), kwargs.get("start_line", 1), kwargs.get("end_line"))
+        elif task == "edit_file":
+            return tools.edit_file_tool(kwargs.get("file_path"), kwargs.get("search_pattern"), kwargs.get("new_content"))
         # ... other tasks
         return None
 
