@@ -1,4 +1,7 @@
 import os
+import logging
+
+logger = logging.getLogger(__name__)
 
 OPENROUTER_API_KEY = os.getenv("OPENROUTER_API_KEY", "")
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "")
@@ -17,4 +20,28 @@ MODEL_CONFIG = {
         "reasoning": os.getenv("OPENROUTER_REASONING_MODEL", "thinkingmachines/inkling:free"),
     }
 }
+
+def validate_config():
+    """Validate that configured models are free."""
+    from ai.model_registry import is_model_free
+    
+    logger.info("Checking OpenRouter configuration...")
+    
+    # Check OPENROUTER models
+    for provider, models in MODEL_CONFIG.items():
+        if provider == "OPENROUTER":
+            for key, model_id in models.items():
+                if not is_model_free(model_id):
+                    error_msg = f"ERROR: Configured model '{model_id}' is not free. Paid models are not allowed."
+                    logger.error(error_msg)
+                    raise ValueError(error_msg)
+    
+    logger.info("✓ All configured OpenRouter models are free.")
+
+# Run validation on import
+try:
+    if OPENROUTER_API_KEY:
+        validate_config()
+except Exception as e:
+    logger.error(f"Configuration validation failed: {e}")
 
