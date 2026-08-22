@@ -141,10 +141,53 @@ def init_handlers(bot_instance):
             logging.exception("VOICE_STT_FAILED: Error in handle_voice_message")
             bot.reply_to(message, f"เกิดข้อผิดพลาดในการรับข้อความเสียง: เกิดปัญหาภายในระบบ")
 
+    @bot.message_handler(content_types=['photo'])
+    def handle_photo_message(message):
+        import logging
+        import os
+        from ai.gemini_api import generate_gemini_response
+
+        logging.info("PHOTO_RECEIVED: chat_id=%s", message.chat.id)
+        file_path = None
+        try:
+            bot.send_chat_action(message.chat.id, 'upload_photo')
+            
+            # Get the highest resolution photo
+            photo = message.photo[-1]
+            file_info = bot.get_file(photo.file_id)
+            
+            temp_file_name = f"temp_photo_{message.chat.id}_{photo.file_id}.jpg"
+            downloaded_file = bot.download_file(file_info.file_path)
+            with open(temp_file_name, 'wb') as f:
+                f.write(downloaded_file)
+            file_path = temp_file_name
+            
+            with open(file_path, 'rb') as f:
+                image_data = f.read()
+
+            bot.send_chat_action(message.chat.id, 'typing')
+            response = generate_gemini_response(image_data, is_vision=True, mime_type="image/jpeg")
+            
+            if not response:
+                bot.reply_to(message, "ขออภัยครับ ไม่สามารถวิเคราะห์รูปภาพนี้ได้")
+                return
+            
+            # Centralized response
+            send_ai_response(bot, message, response)
+        
+        except Exception as e:
+            logging.exception("PHOTO_FAILED")
+            bot.reply_to(message, f"เกิดข้อผิดพลาดในการประมวลผลรูปภาพ")
+        finally:
+            if file_path and os.path.exists(file_path):
+                os.remove(file_path)
+                logging.info("PHOTO_CLEANUP_OK: %s", file_path)
+
     @bot.message_handler(content_types=['document'])
     def handle_document_message(message):
         import logging
         import os
+        import mimetypes
         from services.document_service import get_file_content
         from ai.gemini_api import generate_gemini_response
 
@@ -164,6 +207,22 @@ def init_handlers(bot_instance):
                 f.write(downloaded_file)
             file_path = temp_file_name
             
+            mime_type, _ = mimetypes.guess_type(temp_file_name)
+            
+            # If it's an image, process via Vision
+            if mime_type and mime_type.startswith('image/'):
+                logging.info("DOCUMENT_IS_IMAGE: %s", mime_type)
+                with open(file_path, 'rb') as f:
+                    image_data = f.read()
+                
+                bot.send_chat_action(message.chat.id, 'typing')
+                response = generate_gemini_response(image_data, is_vision=True, mime_type=mime_type)
+                if not response:
+                    bot.reply_to(message, "ขออภัยครับ ไม่สามารถวิเคราะห์รูปภาพนี้ได้")
+                    return
+                send_ai_response(bot, message, response)
+                return
+
             logging.info("DOCUMENT_DOWNLOAD_OK: %s", temp_file_name)
             
             # Process content
