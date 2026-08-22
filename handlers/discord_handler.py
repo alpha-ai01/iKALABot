@@ -111,4 +111,9 @@ def run_discord_bot(token):
             await message.reply(f"เกิดข้อผิดพลาดในการรับภาพ: เกิดปัญหาภายในระบบ")
 
     # Start the bot
+    if not token or len(token) < 50:
+        logging.error("DISCORD_TOKEN seems invalid or too short. Check if it's set correctly in the environment.")
+    else:
+        logging.info("Attempting to log in with Discord token of length %d", len(token))
+    
     bot.run(token)
