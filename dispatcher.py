@@ -14,7 +14,6 @@ def execute_task(task="chat", text="", **kwargs):
 
     return route_request(
         prompt=text,
-        provider=kwargs.get("provider", "auto"),
         is_vision=kwargs.get("is_vision", False),
-        is_x_search=(task == "search"),
+        is_complex=kwargs.get("is_complex", False),
     )

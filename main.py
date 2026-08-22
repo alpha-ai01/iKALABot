@@ -3,6 +3,7 @@ import threading
 import telebot
 from flask import Flask, jsonify
 from handlers.message_handler import init_handlers
+from handlers.discord_handler import run_discord_bot
 
 # ==========================================
 # 1. Flask Health Check Server
@@ -52,7 +53,19 @@ def main():
         )
         bot_thread.start()
     else:
-        print("TELEGRAM_BOT_TOKEN not set, running in HTTP-only mode")
+        print("TELEGRAM_BOT_TOKEN not set, skipping Telegram Bot")
+
+    DISCORD_TOKEN = os.getenv("DISCORD_BOT_TOKEN")
+    if DISCORD_TOKEN:
+        discord_thread = threading.Thread(
+            target=run_discord_bot,
+            args=(DISCORD_TOKEN,),
+            name="discord-bot",
+            daemon=True
+        )
+        discord_thread.start()
+    else:
+        print("DISCORD_BOT_TOKEN not set, skipping Discord Bot")
 
     port = int(os.environ.get("PORT", 10000))
     run_web(port)

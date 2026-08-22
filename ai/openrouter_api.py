@@ -39,14 +39,16 @@ def ask_openrouter(prompt: str) -> str:
 OPENROUTER_URL = "https://openrouter.ai/api/v1/chat/completions"
 
 
-def generate_openrouter_response(prompt, is_x_search=False):
-    """Call OpenRouter REST API using the OpenRouter endpoint described in the project docs.
-
-    Uses config.OPENROUTER_MODEL by default,
-    or config.DEFAULT_X_SEARCH_MODEL when is_x_search is True.
-    Returns a safe stripped string on success or an empty string on failure.
+def generate_openrouter_response(prompt, is_reasoning=False, stream=False):
+    """Call OpenRouter REST API.
+    
+    If is_reasoning is True, uses the reasoning model and enables reasoning in extra_body.
+    Returns response content string.
     """
-    model = config.DEFAULT_X_SEARCH_MODEL if is_x_search else config.OPENROUTER_MODEL
+    if is_reasoning:
+        model = config.MODEL_CONFIG["OPENROUTER"]["reasoning"]
+    else:
+        model = config.MODEL_CONFIG["OPENROUTER"]["primary"]
 
     headers = {
         "Authorization": f"Bearer {config.OPENROUTER_API_KEY}",
@@ -56,15 +58,20 @@ def generate_openrouter_response(prompt, is_x_search=False):
     payload = {
         "model": model,
         "messages": [{"role": "user", "content": prompt}],
+        "stream": stream
     }
+    
+    if is_reasoning:
+        payload["extra_body"] = {"reasoning": {"enabled": True}}
 
     try:
-        logging.info("[OpenRouter] Trying model: %s", model)
-        resp = requests.post(OPENROUTER_URL, headers=headers, data=json.dumps(payload), timeout=15)
+        logging.info("[OpenRouter] Trying model: %s (Reasoning: %s)", model, is_reasoning)
+        resp = requests.post(OPENROUTER_URL, headers=headers, data=json.dumps(payload), timeout=30)
         if resp.status_code != 200:
             logging.error("[OpenRouter] Failed with model %s: %s", model, resp.status_code)
             return ""
 
+        # Simplified for now, assuming no stream for simplicity unless explicitly needed by wrapper
         data = resp.json()
         choices = data.get("choices") or []
         if not choices:

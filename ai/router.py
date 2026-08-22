@@ -18,35 +18,35 @@ def _redact_exception(e):
 
 def route_request(
     prompt,
-    provider="auto",
     is_vision=False,
-    is_x_search=False,
+    is_complex=False,
 ):
     """Route request to the selected provider using the fallback strategy.
 
     Strategy:
-    1. Gemini 3.5 Flash (config.GEMINI_MODEL)
-    2. OpenRouter (config.OPENROUTER_MODEL)
-    3. Gemini 3.5 Flash-Lite (config.GEMINI_FALLBACK_MODEL)
+    1. Complex Task? -> OpenRouter Reasoning
+    2. Primary -> Gemini 3.1 Flash-Lite
+    3. Fallback -> Gemini 3.5 Flash-Lite (via config.MODEL_CONFIG["GOOGLE"]["fallback"])
 
     Returns: string response (empty string on final failure)
     """
-    logging.info("[Router] Starting AI request")
+    logging.info("[Router] Starting AI request (Complex: %s)", is_complex)
 
-    # 1. Try Gemini 3.5 Flash
-    response = generate_gemini_response(prompt, is_vision=is_vision, model_override=config.GEMINI_MODEL)
+    # 1. Try Complex Task -> OpenRouter Reasoning
+    if is_complex:
+        logging.info("[Router] Routing to OpenRouter Reasoning")
+        response = generate_openrouter_response(prompt, is_reasoning=True)
+        if response:
+            return response
+
+    # 2. Try Primary -> Gemini 3.1 Flash-Lite
+    response = generate_gemini_response(prompt, is_vision=is_vision, model_override=config.MODEL_CONFIG["GOOGLE"]["primary"])
     if response:
         return response
 
-    # 2. Try OpenRouter
-    logging.info("[Router] Trying fallback provider: OpenRouter")
-    response = generate_openrouter_response(prompt, is_x_search=is_x_search)
-    if response:
-        return response
-
-    # 3. Try Gemini 3.5 Flash-Lite
+    # 3. Try Fallback -> Gemini 3.5 Flash-Lite
     logging.info("[Router] Trying fallback provider: Gemini Lite")
-    response = generate_gemini_response(prompt, is_vision=is_vision, model_override=config.GEMINI_FALLBACK_MODEL)
+    response = generate_gemini_response(prompt, is_vision=is_vision, model_override=config.MODEL_CONFIG["GOOGLE"]["fallback"])
     if response:
         return response
 
