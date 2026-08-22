@@ -1,3 +1,146 @@
+# Environment / Secrets
 .env
+.env.*
+!.env.example
+*.key
+*.pem
+*.p12
+*.pfx
+.crt
+secrets/
+secret/
+credentials/
+credentials.json
+service-account.json
+
+# Python
 __pycache__/
-*.pyc
+*.py[cod]
+*.pyo
+*.pyd
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+.tox/
+.nox/
+*.egg-info/
+dist/
+build/
+
+# Node.js
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+pnpm-debug.log*
+
+# Virtual environments
+.venv/
+venv/
+env/
+ENV/
+
+# IDE / Editor
+.vscode/
+.idea/
+*.swp
+*.swo
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+logs/
+log/
+
+# Temporary files
+tmp/
+temp/
+.tmp/
+*.tmp
+*.temp
+*.bak
+*.backup
+
+# Telegram / Bot generated files
+downloads/
+uploads/
+received_files/
+telegram_files/
+telegram_downloads/
+bot_files/
+temp_*
+
+# TTS / Audio generated files
+audio/
+audios/
+voice/
+voices/
+tts/
+tts_audio/
+generated_audio/
+generated_voices/
+temp_audio/
+tmp_audio/
+*.mp3
+*.wav
+*.ogg
+*.oga
+*.opus
+*.m4a
+*.aac
+*.flac
+
+# Generated media
+media/
+generated/
+generated_media/
+output/
+outputs/
+
+# Images generated/downloaded at runtime
+runtime_images/
+downloaded_images/
+generated_images/
+
+# Runtime cache
+cache/
+.cache/
+runtime/
+runtime_data/
+
+# Database files
+*.db
+*.sqlite
+*.sqlite3
+
+# Vector databases
+chroma/
+chroma_db/
+vector_db/
+vectors/
+embeddings/
+
+# Local user data
+user_data/
+userdata/
+sessions/
+session_data/
+conversation_data/
+memory_data/
+
+# Backup files
+backup/
+backups/
+*.dump
+*.bak
+
+# Reports / generated exports
+reports/
+exports/
+
+# OS files
+.DS_Store
+Thumbs.db
+desktop.ini
