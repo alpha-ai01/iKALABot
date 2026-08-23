@@ -75,7 +75,7 @@ temp_*
 # TTS / Audio generated files
 audio/
 audios/
-voice/
+# voice/  <-- REMOVED
 voices/
 tts/
 tts_audio/
