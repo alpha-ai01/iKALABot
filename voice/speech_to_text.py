@@ -1,45 +1,45 @@
 import os
-import requests
-import base64
-import logging
+import config
 
-def speech_to_text(audio_bytes: bytes) -> str:
-    """Converts audio bytes to text using OpenRouter API."""
-    
-    api_key = os.getenv("OPENROUTER_API_KEY")
-    if not api_key:
-        logging.error("[Voice] OPENROUTER_API_KEY is not set.")
-        return "[STT ERROR] API Key missing"
-    
-    url = "https://openrouter.ai/api/v1/audio/transcriptions"
-    
-    # Encode audio to base64
-    audio_base64 = base64.b64encode(audio_bytes).decode('utf-8')
-    
-    payload = {
-        "model": "openai/whisper-large-v3",
-        "input_audio": {
-            "data": audio_base64,
-            "format": "ogg" # Telegram voice is usually ogg/opus
-        }
-    }
-    
-    headers = {
-        "Authorization": f"Bearer {api_key}",
-        "Content-Type": "application/json",
-        "HTTP-Referer": "https://ikalabot.ai",
-        "X-Title": "iKALABot"
-    }
+_client = None
+
+def get_client():
+    global _client
+    if _client is None:
+        from google import genai
+        api_key = os.getenv("GEMINI_API_KEY")
+        if not api_key:
+            raise ValueError("GEMINI_API_KEY is not set.")
+        _client = genai.Client(api_key=api_key)
+    return _client
+
+def speech_to_text(audio_bytes):
+    model = config.VOICE_GEMINI_MODEL
+    from google.genai import types
+    import logging
+
+    logging.info("[Voice] Using model: %s", model)
+    logging.info("[Voice] Gemini request started")
     
     try:
-        response = requests.post(url, headers=headers, json=payload, timeout=30)
-        response.raise_for_status()
-        data = response.json()
+        from google.genai import types
         
-        text = data.get("text", "")
-        logging.info("[Voice] STT success")
-        return text
+        # Disable automatic function calling as per SDK recommendation for generate_content
+        config_afc = types.AutomaticFunctionCallingConfig(disable=True)
         
+        response = get_client().models.generate_content(
+            model=model,
+            contents=[
+                types.Part.from_text(text="ถอดข้อความจากไฟล์เสียงนี้เป็นข้อความเท่านั้น ตอบเฉพาะข้อความที่ถอดได้"),
+                types.Part.from_bytes(data=audio_bytes, mime_type="audio/ogg")
+            ],
+            config=types.GenerateContentConfig(
+                automatic_function_calling=config_afc
+            )
+        )
+        logging.info("[Voice] Gemini response success")
+        return (response.text or "").strip()
     except Exception as e:
-        logging.error("[Voice] STT failed: %s", str(e)[:200])
-        return "[STT ERROR]"
+        logging.error("[Voice] Gemini API error: %s", str(e)[:200])
+        return ""
+

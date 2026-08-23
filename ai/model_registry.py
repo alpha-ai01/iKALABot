@@ -2,7 +2,6 @@ import requests
 import logging
 import time
 from typing import List, Dict, Optional
-import config
 
 # Cache for models to avoid excessive API calls
 _model_cache = {
@@ -60,18 +59,6 @@ def is_model_free(model_id: str) -> bool:
 
 def get_best_free_model(capability: str) -> Optional[str]:
     """Return a suitable free model ID based on capability."""
-    
-    # 1. Try configured model first
-    configured_model = None
-    if capability == "text":
-        configured_model = config.MODEL_CONFIG["OPENROUTER"]["primary"]
-    elif capability == "reasoning":
-        configured_model = config.MODEL_CONFIG["OPENROUTER"]["reasoning"]
-    
-    if configured_model and is_model_free(configured_model):
-        return configured_model
-        
-    # 2. Fallback to dynamic selection
     free_models = get_free_models()
     
     # Logic to map capability (text, vision, audio) to models

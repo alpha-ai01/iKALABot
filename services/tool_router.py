@@ -3,34 +3,20 @@ import pytz
 from utils import tools
 from services import document_service
 
-import datetime
-import pytz
-from utils import tools
-from services import document_service
-from services.search_service import SearchRouter
-from services.memory_service import MemoryStore
-
 class ToolRouter:
-    def __init__(self):
-        self.search_router = SearchRouter()
-        self.memory_store = MemoryStore()
-
-    def route(self, task, text=None, user_id=None, chat_id=None, **kwargs):
+    def route(self, task, text=None, **kwargs):
         if task == "time":
             return self._handle_time(kwargs.get("timezone", "Asia/Bangkok"))
         elif task == "search":
-            return self.search_router.search_web(text)
+            return tools.search_web(text)
         elif task == "read_file":
             return tools.read_file_tool(kwargs.get("file_path"), kwargs.get("start_line", 1), kwargs.get("end_line"))
         elif task == "edit_file":
             return tools.edit_file_tool(kwargs.get("file_path"), kwargs.get("search_pattern"), kwargs.get("new_content"))
-        elif task == "list_memories":
-            return self.memory_store.list_memories(user_id, chat_id)
         # ... other tasks
         return None
 
     def _handle_time(self, timezone_str):
-        # ... (unchanged)
         try:
             tz = pytz.timezone(timezone_str)
             now = datetime.datetime.now(tz)
@@ -41,6 +27,7 @@ class ToolRouter:
             }
             day_name = day_map[now.weekday()]
             
+            # Use Thai locale months manually for now since locale setup might be tricky
             month_map = {
                 1: "มกราคม", 2: "กุมภาพันธ์", 3: "มีนาคม", 4: "เมษายน",
                 5: "พฤษภาคม", 6: "มิถุนายน", 7: "กรกฎาคม", 8: "สิงหาคม",
