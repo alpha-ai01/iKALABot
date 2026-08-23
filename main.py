@@ -1,8 +1,14 @@
 import os
 import threading
 import telebot
+import time
+import logging
 from flask import Flask, jsonify
 from handlers.message_handler import init_handlers
+
+# Configure logging
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+logger = logging.getLogger(__name__)
 
 # ==========================================
 # 1. Flask Health Check Server
@@ -27,13 +33,24 @@ def run_bot(token):
     bot = telebot.TeleBot(token)
     init_handlers(bot)
 
-    try:
-        print("Clearing old webhooks...")
-        bot.remove_webhook()
-        print("Starting Telegram Bot Polling...")
-        bot.infinity_polling(timeout=60, long_polling_timeout=60, skip_pending=True, none_stop=True)
-    except Exception as e:
-        print(f"[Polling Error]: {e}")
+    retry_delay = 5  # Start with 5 seconds
+
+    while True:
+        try:
+            logger.info("Clearing old webhooks...")
+            bot.remove_webhook()
+            logger.info("Starting Telegram Bot Polling...")
+            
+            # Reset retry delay on successful start
+            retry_delay = 5
+            
+            bot.infinity_polling(timeout=60, long_polling_timeout=60, skip_pending=True, none_stop=True)
+        except Exception as e:
+            logger.error(f"[Polling Error]: {e}")
+            logger.info(f"Retrying in {retry_delay} seconds...")
+            time.sleep(retry_delay)
+            # Exponential backoff
+            retry_delay = min(retry_delay * 2, 600)  # Max 10 mins
 
 def run_web(port):
     # Disable reloader to prevent double polling
@@ -52,7 +69,7 @@ def main():
         )
         bot_thread.start()
     else:
-        print("TELEGRAM_BOT_TOKEN not set, skipping Telegram Bot")
+        logger.warning("TELEGRAM_BOT_TOKEN not set, skipping Telegram Bot")
 
     port = int(os.environ.get("PORT", 10000))
     run_web(port)
