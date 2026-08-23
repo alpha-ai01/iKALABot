@@ -1,10 +1,9 @@
 import os
-import requests
 import logging
-import tempfile
+from openai import OpenAI
 
 def text_to_speech(text: str) -> str:
-    """Converts text to speech using OpenRouter API and returns the path to the temporary mp3 file."""
+    """Converts text to speech using OpenAI SDK configured for OpenRouter."""
     if not text:
         return ""
     
@@ -15,32 +14,27 @@ def text_to_speech(text: str) -> str:
     
     logging.info("[Voice] TTS started")
     
-    url = "https://openrouter.ai/api/v1/audio/speech"
-    
-    payload = {
-        "model": "openai/gpt-4o-mini-tts-2025-12-15",
-        "input": text,
-        "voice": "alloy",
-        "response_format": "mp3"
-    }
-    
-    headers = {
-        "Authorization": f"Bearer {api_key}",
-        "Content-Type": "application/json",
-        "HTTP-Referer": "https://ikalabot.ai",
-        "X-Title": "iKALABot"
-    }
-    
     try:
-        response = requests.post(url, headers=headers, json=payload, stream=True, timeout=30)
-        response.raise_for_status()
+        client = OpenAI(
+            base_url="https://openrouter.ai/api/v1",
+            api_key=api_key,
+            default_headers={
+                "HTTP-Referer": "https://ikalabot.ai",
+                "X-Title": "iKALABot"
+            }
+        )
+        
+        response = client.audio.speech.create(
+            model="openai/gpt-4o-mini-tts-2025-12-15",
+            input=text,
+            voice="alloy"
+        )
         
         # Create a temporary file
+        import tempfile
         fd, audio_path = tempfile.mkstemp(suffix=".mp3", prefix="voice_response_")
         
-        with open(audio_path, 'wb') as f:
-            for chunk in response.iter_content(chunk_size=8192):
-                f.write(chunk)
+        response.stream_to_file(audio_path)
         
         os.close(fd)
         
