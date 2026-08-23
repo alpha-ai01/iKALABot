@@ -48,6 +48,9 @@ class AIGateway:
             "messages": messages
         }
         
+        logger.info(f"[Gateway] Request URL: {OPENROUTER_URL}")
+        logger.info(f"[Gateway] Request Payload: {json.dumps(payload)}")
+        
         # 4. Request with fallback logic (within free models only)
         try:
             response = requests.post(OPENROUTER_URL, headers=AIGateway._get_headers(), data=json.dumps(payload), timeout=30)

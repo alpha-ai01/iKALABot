@@ -2,33 +2,49 @@ import logging
 
 class SearchRouter:
     def __init__(self):
-        self.providers = ["google", "duckduckgo"]
+        # Primary: duckduckgo, Fallback: google
+        self.primary = "duckduckgo"
+        self.fallback = "google"
 
-    def search_web(self, query, provider=None, max_results=3):
-        """Unified interface for web search."""
-        target_provider = provider or self.providers[0]
+    def search_web(self, query, max_results=5):
+        """Unified interface for web search. Always tries DuckDuckGo first."""
         
-        logging.info("[Search] Query: %s, Provider: %s", query, target_provider)
+        logging.info("[Search] Query: %s", query)
         
+        # 1. Try DuckDuckGo
         try:
-            if target_provider == "google":
-                return self._google_search(query, max_results)
-            elif target_provider == "duckduckgo":
-                return self._duckduckgo_search(query, max_results)
-            else:
-                return f"Unsupported provider: {target_provider}"
+            results = self._duckduckgo_search(query, max_results)
+            if results:
+                logging.info("[Search] DuckDuckGo success")
+                return results
+            logging.warning("[Search] DuckDuckGo returned no results")
         except Exception as e:
-            logging.error("[Search] Error: %s", str(e))
-            return f"Search failed: {str(e)}"
+            logging.error("[Search] DuckDuckGo error: %s", str(e))
+        
+        # 2. Fallback to Google
+        logging.info("[Search] Trying Google fallback")
+        try:
+            return self._google_search(query, max_results)
+        except Exception as e:
+            logging.error("[Search] Google error: %s", str(e))
+            return "Search failed: No providers available."
+
+    def _duckduckgo_search(self, query, max_results):
+        from duckduckgo_search import DDGS
+        results = []
+        with DDGS() as ddgs:
+            # ddgs.text returns a generator
+            for r in ddgs.text(query, max_results=max_results):
+                results.append({
+                    "title": r.get("title", ""),
+                    "url": r.get("href", ""),
+                    "snippet": r.get("body", ""),
+                    "source": "duckduckgo"
+                })
+        return results
 
     def _google_search(self, query, max_results):
         # Placeholder: Implement actual Google Search API call
         return [
-            {"title": "Sample Result", "url": "https://example.com", "snippet": "This is a search result for " + query}
-        ]
-
-    def _duckduckgo_search(self, query, max_results):
-        # Placeholder: Implement actual DuckDuckGo Search
-        return [
-            {"title": "DDG Result", "url": "https://duckduckgo.com", "snippet": "Result for " + query}
+            {"title": "Sample Result (Google)", "url": "https://example.com", "snippet": "This is a search result for " + query, "source": "google"}
         ]
