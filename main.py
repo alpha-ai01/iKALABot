@@ -31,7 +31,7 @@ def run_bot(token):
         print("Clearing old webhooks...")
         bot.remove_webhook()
         print("Starting Telegram Bot Polling...")
-        bot.infinity_polling(timeout=10, long_polling_timeout=5, skip_pending=True)
+        bot.infinity_polling(timeout=60, long_polling_timeout=60, skip_pending=True, none_stop=True)
     except Exception as e:
         print(f"[Polling Error]: {e}")
 
