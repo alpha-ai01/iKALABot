@@ -37,9 +37,11 @@ def run_bot(token):
 
     while True:
         try:
-            logger.info("Clearing old webhooks...")
-            bot.remove_webhook()
-            logger.info("Starting Telegram Bot Polling...")
+            logger.info("กำลังล้าง Webhook เดิมและทิ้งคิวอัปเดตที่ค้างอยู่...")
+            # เคลียร์ Webhook และทิ้งคิวเก่าทั้งหมด
+            bot.delete_webhook(drop_pending_updates=True)
+            
+            logger.info("เริ่ม Telegram Bot Polling...")
             
             # Reset retry delay on successful start
             retry_delay = 5
