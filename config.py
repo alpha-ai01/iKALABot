@@ -9,15 +9,16 @@ TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN", "")
 DISCORD_BOT_TOKEN = os.getenv("DISCORD_BOT_TOKEN", "")
 
 # Unified Model Configuration Structure
+# Force valid models to avoid environment variable overrides of invalid/paid models
 MODEL_CONFIG = {
     "GOOGLE": {
-        "primary": os.getenv("GEMINI_MODEL", "gemini-3.1-flash-lite"),
-        "fallback": os.getenv("GEMINI_FALLBACK_MODEL", "gemini-3.5-flash-lite"),
-        "vision": os.getenv("GEMINI_VISION_MODEL", "gemini-3.1-flash-lite"),
+        "primary": "gemini-1.5-flash",
+        "fallback": "gemini-1.5-flash",
+        "vision": "gemini-1.5-flash",
     },
     "OPENROUTER": {
-        "primary": os.getenv("OPENROUTER_MODEL", "nvidia/nemotron-3.5-lightning:free"),
-        "reasoning": os.getenv("OPENROUTER_REASONING_MODEL", "thinkingmachines/inkling:free"),
+        "primary": "nvidia/nemotron-3.5-lightning:free",
+        "reasoning": "thinkingmachines/inkling:free",
     }
 }
 
