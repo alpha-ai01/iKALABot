@@ -9,6 +9,8 @@ logger = logging.getLogger(__name__)
 class AIGateway:
     @staticmethod
     def _get_client():
+        if not config.OPENROUTER_API_KEY:
+            raise ValueError("OPENROUTER_API_KEY is not configured in the environment.")
         return OpenAI(
             base_url="https://openrouter.ai/api/v1",
             api_key=config.OPENROUTER_API_KEY,
@@ -19,34 +21,26 @@ class AIGateway:
         )
 
     @staticmethod
-    def call_ai(prompt: str, capability: str = "text", images: list = None) -> str:
-        """Unified interface for AI requests using OpenAI SDK."""
-        logger.info(f"[Gateway] Request: capability={capability}")
-        
-        # 1. Determine model
+    def call_ai_stream(prompt: str, capability: str = "text"):
+        """Interface for streaming AI requests."""
         model_id = get_best_free_model(capability)
         if not model_id:
-            return "No compatible free model is currently available."
-        
-        # 2. Pre-request free-model validation (Security enforcement)
-        if not is_model_free(model_id):
-            logger.error(f"[Gateway] Security violation: Attempted to use non-free model {model_id}")
-            return "Security error: Model is not free."
-            
-        logger.info(f"[Gateway] Using free model: {model_id}")
-        
-        # 3. Construct payload
-        messages = [{"role": "user", "content": prompt}]
-        
-        # 4. Request with SDK
-        try:
-            client = AIGateway._get_client()
-            response = client.chat.completions.create(
-                model=model_id,
-                messages=messages
-            )
-            return response.choices[0].message.content
-            
-        except Exception as e:
-            logger.error(f"[Gateway] Error: {e}")
-            return f"Error: {e}"
+            yield "No compatible free model available."
+            return
+
+        client = AIGateway._get_client()
+        stream = client.chat.completions.create(
+            model=model_id,
+            messages=[{"role": "user", "content": prompt}],
+            stream=True,
+            stream_options={"include_usage": True}
+        )
+
+        for chunk in stream:
+            if chunk.choices and chunk.choices[0].delta.content:
+                yield chunk.choices[0].delta.content
+            if chunk.usage and chunk.usage.completion_tokens_details:
+                reasoning = chunk.usage.completion_tokens_details.reasoning_tokens
+                if reasoning:
+                    yield f"\n\n(Reasoning tokens: {reasoning})"
+

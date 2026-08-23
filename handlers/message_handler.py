@@ -62,6 +62,9 @@ def init_handlers(bot_instance):
     def handle_text(message):
         from utils.text_utils import clean_ai_response
         from ai.memory_manager import MemoryManager
+        from ai.gateway import AIGateway
+        import time
+
         text = message.text
         if not text:
             return
@@ -69,37 +72,38 @@ def init_handlers(bot_instance):
         user_id = message.from_user.id
         chat_id = message.chat.id
 
-        # 1. Retrieve relevant memories
         manager = MemoryManager()
         relevant_memories = manager.get_relevant_memories(user_id, chat_id, text)
         
-        # Add memories to context if available
         prompt = text
         if relevant_memories:
             prompt = f"ความทรงจำที่เกี่ยวข้อง: {' '.join(relevant_memories)}\n\nคำถาม: {text}"
 
-        # Simple classification
-        task = "chat"
-        kwargs = {}
+        # 1. Initialize streaming message
+        streaming_message = bot.reply_to(message, "กำลังพิมพ์...")
+        full_response = ""
+        last_update_time = 0
 
-        if any(keyword in text.lower() for keyword in ["กี่โมง", "วันที่", "time", "date"]):
-            task = "time"
-        elif "ค้นหา" in text:
-            task = "search"
-
+        # 2. Stream and update
         try:
-            bot.send_chat_action(message.chat.id, 'typing')
-            response = execute_task(task, text=prompt, **kwargs)
-            if not response:
-                response = "ขออภัยครับ ไม่เข้าใจคำสั่ง"
+            for chunk in AIGateway.call_ai_stream(prompt):
+                full_response += chunk
+                
+                # Throttle updates to ~1 per second to avoid Telegram rate limits
+                current_time = time.time()
+                if current_time - last_update_time > 1:
+                    bot.edit_message_text(full_response, chat_id=chat_id, message_id=streaming_message.message_id)
+                    last_update_time = current_time
+
+            # Final update
+            bot.edit_message_text(full_response, chat_id=chat_id, message_id=streaming_message.message_id)
             
-            # Centralized response
-            send_ai_response(bot, message, response)
+            # 3. Evaluate and save new memory
+            manager.evaluate_and_save(user_id, chat_id, text, str(full_response))
             
-            # 2. Evaluate and save new memory
-            manager.evaluate_and_save(user_id, chat_id, text, str(response))
         except Exception as e:
-            bot.reply_to(message, f"เกิดข้อผิดพลาด: {str(e)}")
+            bot.edit_message_text(f"เกิดข้อผิดพลาดในการสตรีม: {str(e)}", chat_id=chat_id, message_id=streaming_message.message_id)
+
 
     @bot.message_handler(content_types=['voice', 'audio'])
     def handle_voice_message(message):
