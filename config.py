@@ -16,7 +16,7 @@ MODEL_CONFIG = {
         "vision": os.getenv("GEMINI_VISION_MODEL", "gemini-3.1-flash-lite"),
     },
     "OPENROUTER": {
-        "primary": os.getenv("OPENROUTER_MODEL", "meta-llama/llama-3.1-8b-instruct:free"),
+        "primary": os.getenv("OPENROUTER_MODEL", "nvidia/nemotron-3.5-lightning:free"),
         "reasoning": os.getenv("OPENROUTER_REASONING_MODEL", "thinkingmachines/inkling:free"),
     }
 }
