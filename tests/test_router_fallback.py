@@ -12,7 +12,7 @@ class TestRouterFallback(unittest.TestCase):
         
         # Define mock side effects that change per call
         def gemini_side_effect_1(*args, **kwargs):
-            if kwargs.get('model_override') == config.MODEL_CONFIG["GOOGLE"]["primary"]:
+            if kwargs.get('model_override') == config.MODEL_CONFIG["GEMINI_CONFIG"]["primary"]:
                 return ""
             return ""
         
@@ -25,9 +25,9 @@ class TestRouterFallback(unittest.TestCase):
         # Scenario 2: Gemini (primary) fails -> OpenRouter fails -> Gemini (lite) succeeds
         
         def gemini_side_effect_2(*args, **kwargs):
-            if kwargs.get('model_override') == config.MODEL_CONFIG["GOOGLE"]["primary"]:
+            if kwargs.get('model_override') == config.MODEL_CONFIG["GEMINI_CONFIG"]["primary"]:
                 return ""
-            if kwargs.get('model_override') == config.MODEL_CONFIG["GOOGLE"]["fallback"]:
+            if kwargs.get('model_override') == config.MODEL_CONFIG["GEMINI_CONFIG"]["fallback"]:
                 return "Gemini Lite Success"
             return ""
             
