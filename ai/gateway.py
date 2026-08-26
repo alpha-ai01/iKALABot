@@ -89,4 +89,4 @@ class AIGateway:
         if images:
             image_bytes = base64.b64decode(images[0])
             
-        return generate_gemini_response(prompt, is_vision=bool(images), prompt_data=image_bytes or prompt)
+        return generate_gemini_response(prompt_data=image_bytes or prompt, is_vision=bool(images))
