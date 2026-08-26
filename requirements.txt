@@ -1,13 +1,11 @@
-pyTelegramBotAPI==4.36.0
-openai
+pyTelegramBotAPI
 google-genai
-Pillow
-gTTS
 requests
 flask
 pytz
 duckduckgo-search
+Pillow
+gTTS
 pypdf
 python-docx
 openpyxl
-groq

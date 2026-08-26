@@ -4,14 +4,17 @@ import json
 import config
 import base64
 from ai.model_registry import is_model_free, get_best_free_model, get_free_models
+from services.memory_service import MemoryStore
 
 logger = logging.getLogger(__name__)
+memory_store = MemoryStore()
 
 OPENROUTER_URL = "https://openrouter.ai/api/v1/chat/completions"
 
 class AIGateway:
     @staticmethod
     def _get_headers():
+        # ... (unchanged)
         return {
             "Authorization": f"Bearer {config.OPENROUTER_API_KEY}",
             "Content-Type": "application/json",
@@ -20,24 +23,33 @@ class AIGateway:
         }
 
     @staticmethod
-    def _construct_payload(prompt: str, model_id: str, images: list = None):
+    def _construct_payload(prompt: str, model_id: str, images: list = None, chat_id: str = None):
+        # 1. Inject Memory Context
+        context = ""
+        if chat_id:
+            relevant_memories = memory_store.search_memory(user_id="user", chat_id=chat_id, query=prompt)
+            if relevant_memories:
+                context = "\n\nRelevant Context:\n" + "\n".join(relevant_memories)
+
+        final_prompt = prompt + context
+        
+        # 2. Payload Construction
         if images:
-            content = [{"type": "text", "text": prompt}]
+            content = [{"type": "text", "text": final_prompt}]
             for img in images:
-                # Assuming images are already base64 encoded strings
                 content.append({
                     "type": "image_url",
                     "image_url": {"url": f"data:image/jpeg;base64,{img}"}
                 })
             messages = [{"role": "user", "content": content}]
         else:
-            messages = [{"role": "user", "content": prompt}]
+            messages = [{"role": "user", "content": final_prompt}]
             
         return {"model": model_id, "messages": messages}
 
     @staticmethod
-    def call_ai(prompt: str, capability: str = "text", images: list = None) -> str:
-        """Unified interface for AI requests with fallback logic."""
+    def call_ai(prompt: str, capability: str = "text", images: list = None, chat_id: str = None) -> str:
+        # ... (rest of call_ai needs to pass chat_id to _construct_payload)
         logger.info(f"[Gateway] Request: capability={capability}")
         
         # 1. Get all available free models for fallback
@@ -46,7 +58,7 @@ class AIGateway:
         
         # 2. Try OpenRouter models one by one
         for model_id in model_ids:
-            payload = AIGateway._construct_payload(prompt, model_id, images)
+            payload = AIGateway._construct_payload(prompt, model_id, images, chat_id)
             
             try:
                 response = requests.post(
@@ -75,7 +87,6 @@ class AIGateway:
         # Convert base64 images back to bytes if Gemini needs them
         image_bytes = None
         if images:
-            # Assuming just one image for now as per handler
             image_bytes = base64.b64decode(images[0])
             
         return generate_gemini_response(prompt, is_vision=bool(images), prompt_data=image_bytes or prompt)

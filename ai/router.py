@@ -8,7 +8,8 @@ def route_request(
     prompt,
     is_vision=False,
     is_complex=False,
-    images=None
+    images=None,
+    chat_id=None
 ):
     """Route request to the AI Gateway.
     
@@ -21,7 +22,7 @@ def route_request(
         capability = "vision"
     
     # Gateway handles its own fallback
-    response = AIGateway.call_ai(prompt, capability=capability, images=images)
+    response = AIGateway.call_ai(prompt, capability=capability, images=images, chat_id=chat_id)
     
     if response and len(response.strip()) > 0:
         return response

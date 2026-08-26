@@ -27,14 +27,14 @@ def ask_openrouter(prompt: str) -> str:
             return res_data["choices"][0]["message"]["content"]
         elif "error" in res_data:
             logger.error(f"OpenRouter Error Payload: {res_data['error']}")
-            return f"เกิดข้อผิดพลาดจาก AI: {res_data['error'].get('message', 'Unknown error')}"
+            return "เกิดข้อผิดพลาดจากระบบ AI กรุณาลองใหม่อีกครั้ง"
         else:
             logger.error(f"Unexpected OpenRouter response: {res_data}")
             return "ไม่สามารถดึงคำตอบจาก AI ได้ในขณะนี้"
             
     except Exception as e:
         logger.error(f"Error calling OpenRouter: {e}")
-        return f"เกิดข้อผิดพลาดในการเชื่อมต่อ AI: {e}"
+        return "เกิดข้อผิดพลาดในการเชื่อมต่อ AI กรุณาลองใหม่อีกครั้ง"
 
 OPENROUTER_URL = "https://openrouter.ai/api/v1/chat/completions"
 

@@ -1,24 +1,38 @@
-from voice.speech_to_text import speech_to_text
-from dispatcher import execute_task
+import os
+import logging
+from gtts import gTTS
+import tempfile
 
+class VoiceService:
+    @staticmethod
+    def text_to_speech(text: str) -> str:
+        """Converts text to speech with fallback to text if gTTS fails."""
+        if not text:
+            return ""
+        
+        try:
+            lang = 'th' if any('\u0e00' <= char <= '\u0e7f' for char in text) else 'en'
+            
+            # Use temp directory for consistent cleanup
+            temp_dir = tempfile.gettempdir()
+            audio_path = os.path.join(temp_dir, f"voice_{os.urandom(4).hex()}.mp3")
+            
+            tts = gTTS(text=text, lang=lang, slow=False)
+            tts.save(audio_path)
+            
+            if os.path.exists(audio_path) and os.path.getsize(audio_path) > 0:
+                return audio_path
+            
+            raise Exception("Generated empty audio file.")
+            
+        except Exception as e:
+            logging.error(f"[VoiceService] TTS failed: {e}. Fallback to text.")
+            return "" # Returning empty string triggers text fallback in handlers
 
-def process_voice_message(bot, message):
-    try:
-        file_id = message.voice.file_id if message.voice else message.audio.file_id
-        file_info = bot.get_file(file_id)
-        audio = bot.download_file(file_info.file_path)
-
-        text = speech_to_text(audio)
-
-        if not text or text.startswith("[STT ERROR]"):
-            return "ขออภัยครับ ไม่สามารถถอดเสียงได้ในขณะนี้ กรุณาลองใหม่อีกครั้ง"
-
-        reply = execute_task("chat", text)
-
-        if not reply:
-            reply = "ผมไม่สามารถสร้างคำตอบได้"
-
-        return reply
-
-    except Exception as e:
-        return f"Voice Error: {e}"
+    @staticmethod
+    def speech_to_text(audio_bytes: bytes) -> str:
+        """Placeholder for STT implementation, unified from voice/speech_to_text.py"""
+        # Note: Implement actual STT logic here if not already present
+        # Or delegate to the existing voice/speech_to_text.py
+        from voice.speech_to_text import speech_to_text
+        return speech_to_text(audio_bytes)

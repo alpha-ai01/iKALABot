@@ -50,7 +50,7 @@ def search_web(query, max_results=3):
         return "ฟังก์ชันการค้นหาไม่สามารถใช้งานได้ในขณะนี้ (ขาดไลบรารี)"
     except Exception as e:
         logging.error(f"Search failed: {e}")
-        return f"เกิดข้อผิดพลาดในการค้นหา: {e}"
+        return "เกิดข้อผิดพลาดในการค้นหา กรุณาลองใหม่อีกครั้ง"
 
     if not results:
         return "ไม่พบข้อมูลจากการค้นหา"

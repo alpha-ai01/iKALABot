@@ -1,9 +1,11 @@
 import telebot
+import logging
+import os
 from dispatcher import execute_task
-from ai.gemini_api import generate_gemini_response
-import config
+from utils.text_utils import clean_ai_response
+from services.voice_service import VoiceService
 
-# Bot instance will be initialized in main.py to avoid circular imports
+# Bot instance will be initialized in main.py
 bot = None
 
 def init_handlers(bot_instance):
@@ -12,145 +14,71 @@ def init_handlers(bot_instance):
 
     @bot.message_handler(commands=['start', 'help'])
     def send_welcome(message):
-        bot.reply_to(message, "สวัสดีครับ ผมคือ iKALABot ผู้ช่วยอัจฉริยะ ยินดีให้บริการครับ มีอะไรให้ผมช่วยดูแลหรือสอบถามเพิ่มเติมได้เลยครับ")
+        bot.reply_to(message, "สวัสดีครับ ผมคือ iKALABot ผู้ช่วยอัจฉริยะ ยินดีให้บริการครับ")
 
     @bot.message_handler(func=lambda message: True, content_types=['text'])
     def handle_text(message):
-        from utils.text_utils import clean_ai_response
         text = message.text
         if not text:
             return
 
-        # Simple classification
+        # Intent classification
         task = "chat"
-        kwargs = {}
-
-        if any(keyword in text.lower() for keyword in ["กี่โมง", "วันที่", "time", "date"]):
+        if any(k in text.lower() for k in ["กี่โมง", "วันที่", "time", "date"]):
             task = "time"
         elif "ค้นหา" in text:
             task = "search"
 
-        try:
-            bot.send_chat_action(message.chat.id, 'typing')
-            response = execute_task(task, text=text, **kwargs)
-            if not response:
-                response = "ขออภัยครับ ไม่เข้าใจคำสั่ง"
-            
-            clean_response = clean_ai_response(str(response))
-            bot.reply_to(message, clean_response)
-        except Exception as e:
-            bot.reply_to(message, f"เกิดข้อผิดพลาด: {str(e)}")
+        bot.send_chat_action(message.chat.id, 'typing')
+        response = execute_task(task, text=text, chat_id=str(message.chat.id))
+        bot.reply_to(message, clean_ai_response(str(response)))
 
     @bot.message_handler(content_types=['voice', 'audio'])
-    def handle_voice_message(message):
-        import logging
-        import os
-        from voice.text_to_speech import text_to_speech
-        from utils.text_utils import clean_ai_response
-        
-        logging.info("VOICE_RECEIVED: chat_id=%s", message.chat.id)
+    def handle_voice(message):
+        logging.info("VOICE_RECEIVED")
         try:
             bot.send_chat_action(message.chat.id, 'typing')
+            # Extract and convert
             file_info = bot.get_file(message.voice.file_id if message.voice else message.audio.file_id)
-            logging.info("VOICE_FILE_INFO_OK")
-            downloaded_file = bot.download_file(file_info.file_path)
-            logging.info("VOICE_DOWNLOAD_OK")
-            
-            from voice.speech_to_text import speech_to_text
-            logging.info("VOICE_STT_START")
-            transcript = speech_to_text(downloaded_file)
+            downloaded = bot.download_file(file_info.file_path)
+            transcript = VoiceService.speech_to_text(downloaded)
             
             if not transcript:
-                logging.info("VOICE_STT_EMPTY")
-                bot.reply_to(message, "ขออภัยครับ ไม่สามารถถอดข้อความจากเสียงนี้ได้")
+                bot.reply_to(message, "ไม่สามารถถอดเสียงได้")
                 return
             
-            logging.info("VOICE_STT_OK")
-            
-            # Now process the transcript as a text command
-            logging.info("VOICE_DISPATCH_START")
-            response = execute_task("chat", text=transcript)
-            logging.info("VOICE_DISPATCH_OK")
-            
-            if not response:
-                response = "ขออภัยครับ ไม่เข้าใจคำสั่งในเสียง"
-            
+            # Unified execution
+            response = execute_task("chat", text=transcript, chat_id=str(message.chat.id))
             clean_response = clean_ai_response(str(response))
-                
-            # Send text response
             bot.reply_to(message, clean_response)
-            logging.info("VOICE_REPLY_OK")
             
-            # TTS and send voice
-            logging.info("[Voice] TTS started")
-            audio_path = text_to_speech(clean_response)
-            
+            # Voice reply
+            audio_path = VoiceService.text_to_speech(clean_response)
             if audio_path:
-                logging.info("[Voice] Sending voice to Telegram")
-                with open(audio_path, "rb") as audio:
-                    bot.send_voice(message.chat.id, audio)
-                logging.info("[Voice] Voice sent successfully")
-                
-                # Cleanup
-                if os.path.exists(audio_path):
-                    os.remove(audio_path)
-                    logging.info("[Voice] Temporary file removed")
-            else:
-                logging.info("[Voice] Sending text fallback")
-                
+                with open(audio_path, "rb") as f:
+                    bot.send_voice(message.chat.id, f)
+                os.remove(audio_path)
         except Exception as e:
-            logging.exception("VOICE_STT_FAILED: Error in handle_voice_message")
-            bot.reply_to(message, f"เกิดข้อผิดพลาดในการรับข้อความเสียง: เกิดปัญหาภายในระบบ")
+            logging.exception("VOICE_FAILED")
+            bot.reply_to(message, "เกิดข้อผิดพลาดในการรับเสียง")
 
     @bot.message_handler(content_types=['photo'])
-    def handle_photo_message(message):
-        import logging
-        import os
-        from utils.text_utils import clean_ai_response
-        from voice.text_to_speech import text_to_speech
-        
-        logging.info("PHOTO_RECEIVED: chat_id=%s", message.chat.id)
+    def handle_photo(message):
+        logging.info("PHOTO_RECEIVED")
         try:
             bot.send_chat_action(message.chat.id, 'typing')
-            # Get the highest resolution photo
+            # Get photo
             photo = message.photo[-1]
             file_info = bot.get_file(photo.file_id)
-            logging.info("PHOTO_DOWNLOAD_OK")
-            downloaded_file = bot.download_file(file_info.file_path)
-            logging.info("PHOTO_VALIDATE_OK")
+            downloaded = bot.download_file(file_info.file_path)
             
-            logging.info("VISION_START")
-            from ai.gemini_api import generate_gemini_response
-            # mime_type is usually image/jpeg for Telegram photos
-            response = generate_gemini_response(downloaded_file, is_vision=True, mime_type="image/jpeg")
+            # Pass to unified router with image data
+            import base64
+            img_b64 = base64.b64encode(downloaded).decode('utf-8')
             
-            if not response:
-                logging.info("VISION_EMPTY")
-                bot.reply_to(message, "ขออภัยครับ ไม่สามารถวิเคราะห์ภาพนี้ได้")
-                return
+            response = execute_task("chat", text="วิเคราะห์ภาพนี้", images=[img_b64], chat_id=str(message.chat.id))
+            bot.reply_to(message, clean_ai_response(str(response)))
             
-            logging.info("VISION_OK")
-            clean_response = clean_ai_response(str(response))
-            bot.reply_to(message, clean_response)
-            logging.info("PHOTO_REPLY_OK")
-
-            # TTS and send voice
-            logging.info("[Voice] TTS started")
-            audio_path = text_to_speech(clean_response)
-            
-            if audio_path:
-                logging.info("[Voice] Sending voice to Telegram")
-                with open(audio_path, "rb") as audio:
-                    bot.send_voice(message.chat.id, audio)
-                logging.info("[Voice] Voice sent successfully")
-                
-                # Cleanup
-                if os.path.exists(audio_path):
-                    os.remove(audio_path)
-                    logging.info("[Voice] Temporary file removed")
-            else:
-                logging.info("[Voice] Sending text fallback")
-
         except Exception as e:
-            logging.exception("VISION_FAILED: Error in handle_photo_message")
-            bot.reply_to(message, f"เกิดข้อผิดพลาดในการรับภาพ: เกิดปัญหาภายในระบบ")
+            logging.exception("VISION_FAILED")
+            bot.reply_to(message, "เกิดข้อผิดพลาดในการวิเคราะห์ภาพ")
