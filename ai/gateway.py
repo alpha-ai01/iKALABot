@@ -1,64 +1,15 @@
 import logging
-import requests
-import json
-import config
 import base64
-from ai.model_registry import is_model_free, get_best_free_model, get_free_models
-from services.memory_service import MemoryStore
+from ai.model_registry import get_free_models
+from ai.summarization_manager import SummarizationManager
+from ai.openrouter_client import OpenRouterClient
 
 logger = logging.getLogger(__name__)
-memory_store = MemoryStore()
-
-OPENROUTER_URL = "https://openrouter.ai/api/v1/chat/completions"
-
-# Cache for message count
-_message_counts = {}
-# Failure tracking for pruning
-_model_failures = {}
-FAILURE_THRESHOLD = 3
 
 class AIGateway:
     @staticmethod
-    def _get_headers():
-        # ... (unchanged)
-        return {
-            "Authorization": f"Bearer {config.OPENROUTER_API_KEY}",
-            "Content-Type": "application/json",
-            "HTTP-Referer": "https://ikalabot.ai",
-            "X-Title": "iKALABot"
-        }
-
-    @staticmethod
-    def _trigger_summarization(chat_id, prompt):
-        global _message_counts
-        _message_counts[chat_id] = _message_counts.get(chat_id, 0) + 1
-        
-        if _message_counts[chat_id] >= 10:
-            logger.info(f"[Gateway] Triggering summarization for {chat_id}")
-            from services.summarization_service import SummarizationService
-            # Fetch recent history (simulated for now)
-            # In a real app, fetch conversation history from memory_store
-            recent_history = [prompt] 
-            summary = SummarizationService.summarize_context(recent_history)
-            memory_store.save_summary(chat_id, summary)
-            _message_counts[chat_id] = 0
-
-    @staticmethod
     def _construct_payload(prompt: str, model_id: str, images: list = None, chat_id: str = None):
-        # 1. Inject Memory Context
-        context = ""
-        if chat_id:
-            # Add existing memory
-            relevant_memories = memory_store.search_memory(user_id="user", chat_id=chat_id, query=prompt)
-            if relevant_memories:
-                context += "\n\nRelevant Context:\n" + "\n".join(relevant_memories)
-            
-            # Add summary
-            summary = memory_store.get_summary(chat_id)
-            if summary:
-                context += "\n\nConversation Summary:\n" + summary
-
-        final_prompt = prompt + context
+        final_prompt = prompt + SummarizationManager.get_context(chat_id, prompt)
         
         # 2. Payload Construction
         if images:
@@ -76,7 +27,6 @@ class AIGateway:
 
     @staticmethod
     def call_ai(prompt: str, capability: str = "text", images: list = None, chat_id: str = None) -> str:
-        # ... (rest of call_ai needs to pass chat_id to _construct_payload)
         logger.info(f"[Gateway] Request: capability={capability}")
         
         # 1. Get all available free models for fallback
@@ -86,40 +36,14 @@ class AIGateway:
         # 2. Try OpenRouter models one by one
         for model_id in model_ids:
             if chat_id:
-                AIGateway._trigger_summarization(chat_id, prompt)
+                SummarizationManager.trigger(chat_id, prompt)
             
             payload = AIGateway._construct_payload(prompt, model_id, images, chat_id)
             
-            try:
-                response = requests.post(
-                    OPENROUTER_URL, 
-                    headers=AIGateway._get_headers(), 
-                    data=json.dumps(payload), 
-                    timeout=30
-                )
+            response = OpenRouterClient.call_model(model_id, payload)
+            if response:
+                return response
                 
-                if response.status_code == 429:
-                    logger.warning(f"[Gateway] Rate limit on {model_id}. Trying another free model.")
-                    continue # Try next model
-                
-                response.raise_for_status()
-                data = response.json()
-                
-                # Success, reset failures
-                _model_failures[model_id] = 0
-                
-                return data["choices"][0]["message"]["content"]
-                
-            except Exception as e:
-                logger.error(f"[Gateway] Error with {model_id}: {e}")
-                if "404" in str(e) or "403" in str(e):
-                    _model_failures[model_id] = _model_failures.get(model_id, 0) + 1
-                    if _model_failures[model_id] >= FAILURE_THRESHOLD:
-                        from ai.model_registry import remove_model_from_cache
-                        remove_model_from_cache(model_id)
-                        del _model_failures[model_id]
-                continue # Try next model
-        
         # 3. All OpenRouter models failed. Fallback to Gemini.
         logger.warning("[Gateway] All OpenRouter models failed. Falling back to Gemini.")
         from ai.gemini_api import generate_gemini_response
