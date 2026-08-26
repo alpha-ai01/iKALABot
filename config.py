@@ -44,4 +44,3 @@ try:
         validate_config()
 except Exception as e:
     logger.error(f"Configuration validation failed: {e}")
-
