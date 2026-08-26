@@ -13,6 +13,9 @@ OPENROUTER_URL = "https://openrouter.ai/api/v1/chat/completions"
 
 # Cache for message count
 _message_counts = {}
+# Failure tracking for pruning
+_model_failures = {}
+FAILURE_THRESHOLD = 3
 
 class AIGateway:
     @staticmethod
@@ -101,13 +104,20 @@ class AIGateway:
                 
                 response.raise_for_status()
                 data = response.json()
+                
+                # Success, reset failures
+                _model_failures[model_id] = 0
+                
                 return data["choices"][0]["message"]["content"]
                 
             except Exception as e:
                 logger.error(f"[Gateway] Error with {model_id}: {e}")
                 if "404" in str(e) or "403" in str(e):
-                    from ai.model_registry import remove_model_from_cache
-                    remove_model_from_cache(model_id)
+                    _model_failures[model_id] = _model_failures.get(model_id, 0) + 1
+                    if _model_failures[model_id] >= FAILURE_THRESHOLD:
+                        from ai.model_registry import remove_model_from_cache
+                        remove_model_from_cache(model_id)
+                        del _model_failures[model_id]
                 continue # Try next model
         
         # 3. All OpenRouter models failed. Fallback to Gemini.
