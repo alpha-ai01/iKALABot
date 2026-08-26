@@ -6,16 +6,40 @@ import re
 
 from utils.file_handler import read_file_range, targeted_edit, get_file_type
 
+# Project Root for sandboxing
+PROJECT_ROOT = os.getcwd()
+
+def validate_path(file_path):
+    """Ensure path is within project root and not sensitive."""
+    abs_path = os.path.abspath(file_path)
+    if not abs_path.startswith(PROJECT_ROOT):
+        raise ValueError("Access Denied: Path is outside project directory.")
+    
+    # Deny access to sensitive files
+    sensitive_files = [".env", ".git", ".db", "config.py"]
+    for s in sensitive_files:
+        if s in abs_path:
+            raise ValueError(f"Access Denied: Cannot access sensitive file {s}")
+    return abs_path
+
 def get_current_time():
     tz = pytz.timezone('Asia/Bangkok')
     now = datetime.now(tz)
     return now.strftime("ขณะนี้เวลา %H:%M น. ของวันที่ %d/%m/%Y")
 
 def read_file_tool(file_path, start_line=1, end_line=None):
-    return read_file_range(file_path, start_line, end_line)
+    try:
+        validated_path = validate_path(file_path)
+        return read_file_range(validated_path, start_line, end_line)
+    except Exception as e:
+        return str(e)
 
 def edit_file_tool(file_path, search_pattern, new_content):
-    return targeted_edit(file_path, search_pattern, new_content)
+    try:
+        validated_path = validate_path(file_path)
+        return targeted_edit(validated_path, search_pattern, new_content)
+    except Exception as e:
+        return str(e)
 
 def search_web(query, max_results=3):
     try:

@@ -8,6 +8,7 @@ def route_request(
     prompt,
     is_vision=False,
     is_complex=False,
+    images=None
 ):
     """Route request to the AI Gateway.
     
@@ -19,12 +20,12 @@ def route_request(
     if is_vision:
         capability = "vision"
     
-    # Simple routing to Gateway
-    response = AIGateway.call_ai(prompt, capability=capability)
+    # Gateway handles its own fallback
+    response = AIGateway.call_ai(prompt, capability=capability, images=images)
     
-    if response and not response.startswith("Error:"):
+    if response and len(response.strip()) > 0:
         return response
 
-    logging.error("[Router] All providers failed")
+    logging.error("[Router] All providers (OpenRouter & Gemini) failed")
     return "ขออภัย ระบบ AI ไม่สามารถตอบคำถามได้ในขณะนี้ กรุณาลองใหม่อีกครั้ง"
 

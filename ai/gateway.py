@@ -2,7 +2,8 @@ import logging
 import requests
 import json
 import config
-from ai.model_registry import is_model_free, get_best_free_model
+import base64
+from ai.model_registry import is_model_free, get_best_free_model, get_free_models
 
 logger = logging.getLogger(__name__)
 
@@ -19,48 +20,62 @@ class AIGateway:
         }
 
     @staticmethod
+    def _construct_payload(prompt: str, model_id: str, images: list = None):
+        if images:
+            content = [{"type": "text", "text": prompt}]
+            for img in images:
+                # Assuming images are already base64 encoded strings
+                content.append({
+                    "type": "image_url",
+                    "image_url": {"url": f"data:image/jpeg;base64,{img}"}
+                })
+            messages = [{"role": "user", "content": content}]
+        else:
+            messages = [{"role": "user", "content": prompt}]
+            
+        return {"model": model_id, "messages": messages}
+
+    @staticmethod
     def call_ai(prompt: str, capability: str = "text", images: list = None) -> str:
-        """Unified interface for AI requests."""
+        """Unified interface for AI requests with fallback logic."""
         logger.info(f"[Gateway] Request: capability={capability}")
         
-        # 1. Determine model
-        model_id = get_best_free_model(capability)
-        if not model_id:
-            return "No compatible free model is currently available."
+        # 1. Get all available free models for fallback
+        free_models = get_free_models()
+        model_ids = [m.get("id") for m in free_models]
         
-        # 2. Pre-request free-model validation (Security enforcement)
-        if not is_model_free(model_id):
-            logger.error(f"[Gateway] Security violation: Attempted to use non-free model {model_id}")
-            return "Security error: Model is not free."
+        # 2. Try OpenRouter models one by one
+        for model_id in model_ids:
+            payload = AIGateway._construct_payload(prompt, model_id, images)
             
-        logger.info(f"[Gateway] Using free model: {model_id}")
-        
-        # 3. Construct payload
-        messages = [{"role": "user", "content": prompt}]
-        # Handle multimodal
-        if images:
-            # Need to format for OpenRouter (e.g., base64 or URLs)
-            # This is a placeholder for actual multimodal construction
-            pass
-            
-        payload = {
-            "model": model_id,
-            "messages": messages
-        }
-        
-        # 4. Request with fallback logic (within free models only)
-        try:
-            response = requests.post(OPENROUTER_URL, headers=AIGateway._get_headers(), data=json.dumps(payload), timeout=30)
-            
-            if response.status_code == 429: # Rate limit
-                logger.warning(f"[Gateway] Rate limit on {model_id}. Trying another free model.")
-                # Implement retry/fallback logic to another free model here
-                return "Rate limited. Please try again later."
+            try:
+                response = requests.post(
+                    OPENROUTER_URL, 
+                    headers=AIGateway._get_headers(), 
+                    data=json.dumps(payload), 
+                    timeout=30
+                )
                 
-            response.raise_for_status()
-            data = response.json()
-            return data["choices"][0]["message"]["content"]
+                if response.status_code == 429:
+                    logger.warning(f"[Gateway] Rate limit on {model_id}. Trying another free model.")
+                    continue # Try next model
+                
+                response.raise_for_status()
+                data = response.json()
+                return data["choices"][0]["message"]["content"]
+                
+            except Exception as e:
+                logger.error(f"[Gateway] Error with {model_id}: {e}")
+                continue # Try next model
+        
+        # 3. All OpenRouter models failed. Fallback to Gemini.
+        logger.warning("[Gateway] All OpenRouter models failed. Falling back to Gemini.")
+        from ai.gemini_api import generate_gemini_response
+        
+        # Convert base64 images back to bytes if Gemini needs them
+        image_bytes = None
+        if images:
+            # Assuming just one image for now as per handler
+            image_bytes = base64.b64decode(images[0])
             
-        except Exception as e:
-            logger.error(f"[Gateway] Error: {e}")
-            return f"Error: {e}"
+        return generate_gemini_response(prompt, is_vision=bool(images), prompt_data=image_bytes or prompt)
