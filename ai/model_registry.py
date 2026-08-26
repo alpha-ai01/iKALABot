@@ -12,6 +12,18 @@ _model_cache = {
 
 logger = logging.getLogger(__name__)
 
+def remove_model_from_cache(model_id: str):
+    """Remove a problematic model from cache."""
+    global _model_cache
+    _model_cache["data"] = [m for m in _model_cache["data"] if m.get("id") != model_id]
+    logger.warning(f"[ModelRegistry] Removed problematic model: {model_id}")
+
+def invalidate_cache():
+    """Force cache invalidation."""
+    global _model_cache
+    _model_cache["last_updated"] = 0
+    logger.info("[ModelRegistry] Cache invalidated.")
+
 def fetch_and_cache_models():
     """Fetch models from OpenRouter and cache them."""
     global _model_cache

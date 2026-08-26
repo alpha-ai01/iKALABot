@@ -78,6 +78,9 @@ class AIGateway:
                 
             except Exception as e:
                 logger.error(f"[Gateway] Error with {model_id}: {e}")
+                if "404" in str(e) or "403" in str(e):
+                    from ai.model_registry import remove_model_from_cache
+                    remove_model_from_cache(model_id)
                 continue # Try next model
         
         # 3. All OpenRouter models failed. Fallback to Gemini.
