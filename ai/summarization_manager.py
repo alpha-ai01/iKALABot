@@ -14,12 +14,17 @@ class SummarizationManager:
         SummarizationManager._message_counts[chat_id] = SummarizationManager._message_counts.get(chat_id, 0) + 1
         
         if SummarizationManager._message_counts[chat_id] >= 10:
-            logger.info(f"[SummarizationManager] Triggering for {chat_id}")
+            logger.info(
+                "[SummarizationManager] Triggering summarization. Chat ID: %s, Message Count: %s",
+                chat_id, 
+                SummarizationManager._message_counts[chat_id]
+            )
             # Fetch recent history (simulated for now)
             # In a real app, fetch conversation history from memory_store
             recent_history = [prompt] 
             summary = SummarizationService.summarize_context(recent_history)
             memory_store.save_summary(chat_id, summary)
+            logger.info("[SummarizationManager] Summary saved for Chat ID: %s", chat_id)
             SummarizationManager._message_counts[chat_id] = 0
 
     @staticmethod
