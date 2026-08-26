@@ -21,6 +21,27 @@ class MemoryStore:
                     updated_at TIMESTAMP
                 )
             """)
+            conn.execute("""
+                CREATE TABLE IF NOT EXISTS summaries (
+                    chat_id TEXT PRIMARY KEY,
+                    summary TEXT,
+                    updated_at TIMESTAMP
+                )
+            """)
+
+    def save_summary(self, chat_id, summary):
+        now = datetime.datetime.now()
+        with sqlite3.connect(self.db_path) as conn:
+            conn.execute("""
+                INSERT OR REPLACE INTO summaries (chat_id, summary, updated_at)
+                VALUES (?, ?, ?)
+            """, (chat_id, summary, now))
+
+    def get_summary(self, chat_id):
+        with sqlite3.connect(self.db_path) as conn:
+            cursor = conn.execute("SELECT summary FROM summaries WHERE chat_id = ?", (chat_id,))
+            row = cursor.fetchone()
+            return row[0] if row else None
 
     def save_memory(self, user_id, chat_id, text, category="general", importance=1):
         now = datetime.datetime.now()

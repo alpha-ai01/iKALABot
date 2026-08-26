@@ -11,6 +11,9 @@ memory_store = MemoryStore()
 
 OPENROUTER_URL = "https://openrouter.ai/api/v1/chat/completions"
 
+# Cache for message count
+_message_counts = {}
+
 class AIGateway:
     @staticmethod
     def _get_headers():
@@ -23,13 +26,34 @@ class AIGateway:
         }
 
     @staticmethod
+    def _trigger_summarization(chat_id, prompt):
+        global _message_counts
+        _message_counts[chat_id] = _message_counts.get(chat_id, 0) + 1
+        
+        if _message_counts[chat_id] >= 10:
+            logger.info(f"[Gateway] Triggering summarization for {chat_id}")
+            from services.summarization_service import SummarizationService
+            # Fetch recent history (simulated for now)
+            # In a real app, fetch conversation history from memory_store
+            recent_history = [prompt] 
+            summary = SummarizationService.summarize_context(recent_history)
+            memory_store.save_summary(chat_id, summary)
+            _message_counts[chat_id] = 0
+
+    @staticmethod
     def _construct_payload(prompt: str, model_id: str, images: list = None, chat_id: str = None):
         # 1. Inject Memory Context
         context = ""
         if chat_id:
+            # Add existing memory
             relevant_memories = memory_store.search_memory(user_id="user", chat_id=chat_id, query=prompt)
             if relevant_memories:
-                context = "\n\nRelevant Context:\n" + "\n".join(relevant_memories)
+                context += "\n\nRelevant Context:\n" + "\n".join(relevant_memories)
+            
+            # Add summary
+            summary = memory_store.get_summary(chat_id)
+            if summary:
+                context += "\n\nConversation Summary:\n" + summary
 
         final_prompt = prompt + context
         
@@ -58,6 +82,9 @@ class AIGateway:
         
         # 2. Try OpenRouter models one by one
         for model_id in model_ids:
+            if chat_id:
+                AIGateway._trigger_summarization(chat_id, prompt)
+            
             payload = AIGateway._construct_payload(prompt, model_id, images, chat_id)
             
             try:
