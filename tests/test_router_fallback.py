@@ -5,37 +5,28 @@ import config
 
 class TestRouterFallback(unittest.TestCase):
 
-    @patch('ai.router.generate_gemini_response')
-    @patch('ai.router.generate_openrouter_response')
-    def test_fallback_flow(self, mock_openrouter, mock_gemini):
-        # Scenario 1: Gemini (primary) fails -> OpenRouter succeeds
+    @patch('ai.gemini_api.generate_gemini_response')
+    @patch('ai.gateway.requests.post')
+    def test_fallback_flow(self, mock_requests, mock_gemini):
+        # Scenario 1: OpenRouter fails -> Gemini succeeds
         
-        # Define mock side effects that change per call
-        def gemini_side_effect_1(*args, **kwargs):
-            if kwargs.get('model_override') == config.MODEL_CONFIG["GEMINI_CONFIG"]["primary"]:
-                return ""
-            return ""
+        # Mock OpenRouter failure (e.g., status 404 or empty response)
+        mock_response = unittest.mock.Mock()
+        mock_response.status_code = 404
+        mock_requests.return_value = mock_response
         
-        mock_gemini.side_effect = gemini_side_effect_1
-        mock_openrouter.return_value = "OpenRouter Success"
+        mock_gemini.return_value = "Gemini Success"
+        
+        response = route_request("Test prompt")
+        self.assertEqual(response, "Gemini Success")
+        
+        # Scenario 2: OpenRouter succeeds
+        
+        mock_response.status_code = 200
+        mock_response.json.return_value = {"choices": [{"message": {"content": "OpenRouter Success"}}]}
         
         response = route_request("Test prompt")
         self.assertEqual(response, "OpenRouter Success")
-        
-        # Scenario 2: Gemini (primary) fails -> OpenRouter fails -> Gemini (lite) succeeds
-        
-        def gemini_side_effect_2(*args, **kwargs):
-            if kwargs.get('model_override') == config.MODEL_CONFIG["GEMINI_CONFIG"]["primary"]:
-                return ""
-            if kwargs.get('model_override') == config.MODEL_CONFIG["GEMINI_CONFIG"]["fallback"]:
-                return "Gemini Lite Success"
-            return ""
-            
-        mock_gemini.side_effect = gemini_side_effect_2
-        mock_openrouter.return_value = ""
-        
-        response = route_request("Test prompt")
-        self.assertEqual(response, "Gemini Lite Success")
 
 if __name__ == '__main__':
     unittest.main()
