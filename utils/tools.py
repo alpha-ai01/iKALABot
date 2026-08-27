@@ -2,12 +2,64 @@ import pytz
 from datetime import datetime
 import logging
 import os
-import re
+import abc
+from typing import List, Dict
 
 from utils.file_handler import read_file_range, targeted_edit, get_file_type
 
 # Project Root for sandboxing
 PROJECT_ROOT = os.getcwd()
+
+# --- Search Architecture ---
+
+class SearchProvider(abc.ABC):
+    @abc.abstractmethod
+    def search(self, query: str, max_results: int) -> List[Dict[str, str]]:
+        pass
+
+class DDGProvider(SearchProvider):
+    def search(self, query: str, max_results: int) -> List[Dict[str, str]]:
+        try:
+            from ddgs import DDGS
+            with DDGS() as ddgs:
+                results = list(ddgs.text(query, max_results=max_results))
+            return [{'title': r['title'], 'body': r['body'], 'href': r['href']} for r in results]
+        except ImportError:
+            logging.error("ddgs library not installed, skipping DDG search.")
+            return []
+        except Exception as e:
+            logging.error(f"DDG Search failed: {e}")
+            return []
+
+class GoogleSearchProvider(SearchProvider):
+    def __init__(self, api_key: str, engine_id: str):
+        self.api_key = api_key
+        self.engine_id = engine_id
+
+    def search(self, query: str, max_results: int) -> List[Dict[str, str]]:
+        # TODO: Implement actual Google Search API call with quota check
+        logging.info("Google Search API called.")
+        return []
+
+class SearchRouter:
+    def __init__(self):
+        self.providers = []
+        # Register providers
+        if os.getenv("GOOGLE_SEARCH_API_KEY") and os.getenv("GOOGLE_SEARCH_ENGINE_ID"):
+             self.providers.append(GoogleSearchProvider(os.getenv("GOOGLE_SEARCH_API_KEY"), os.getenv("GOOGLE_SEARCH_ENGINE_ID")))
+        self.providers.append(DDGProvider())
+
+    def search(self, query: str, max_results: int = 3) -> str:
+        for provider in self.providers:
+            results = provider.search(query, max_results)
+            if results:
+                response = f"🔍 ผลการค้นหาจาก {provider.__class__.__name__} สำหรับ: '{query}'\n\n"
+                for res in results:
+                    response += f"📌 {res['title']}\n{res['body']}\n🔗 {res['href']}\n\n"
+                return response
+        return "ไม่พบข้อมูลจากการค้นหา"
+
+# --- Existing Functions ---
 
 def validate_path(file_path):
     """Ensure path is within project root and not sensitive."""
@@ -23,6 +75,7 @@ def validate_path(file_path):
     return abs_path
 
 def get_current_time():
+    # TODO: Implement Thai format as per requirements
     tz = pytz.timezone('Asia/Bangkok')
     now = datetime.now(tz)
     return now.strftime("ขณะนี้เวลา %H:%M น. ของวันที่ %d/%m/%Y")
@@ -42,20 +95,5 @@ def edit_file_tool(file_path, search_pattern, new_content):
         return str(e)
 
 def search_web(query, max_results=3):
-    try:
-        from duckduckgo_search import DDGS
-        results = DDGS().text(query, max_results=max_results)
-    except ImportError:
-        logging.error("DuckDuckGo search dependency is missing.")
-        return "ฟังก์ชันการค้นหาไม่สามารถใช้งานได้ในขณะนี้ (ขาดไลบรารี)"
-    except Exception as e:
-        logging.error(f"Search failed: {e}")
-        return "เกิดข้อผิดพลาดในการค้นหา กรุณาลองใหม่อีกครั้ง"
-
-    if not results:
-        return "ไม่พบข้อมูลจากการค้นหา"
-
-    response = f"🔍 ผลการค้นหาสำหรับ: '{query}'\n\n"
-    for res in results:
-        response += f"📌 {res['title']}\n{res['body']}\n🔗 {res['href']}\n\n"
-    return response
+    router = SearchRouter()
+    return router.search(query, max_results)
