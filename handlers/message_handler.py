@@ -4,7 +4,7 @@ import os
 from dispatcher import execute_task
 from utils.response_manager import send_ai_response
 from services.voice_service import VoiceService
-from services.document_service import DocumentService
+from services import document_service
 
 # Bot instance will be initialized in main.py
 bot = None
@@ -39,17 +39,40 @@ def init_handlers(bot_instance):
     @bot.message_handler(content_types=['document'])
     def handle_document(message):
         logging.info("DOCUMENT_RECEIVED")
+        temp_file_path = None
         try:
             bot.send_chat_action(message.chat.id, 'typing')
             file_info = bot.get_file(message.document.file_id)
             downloaded = bot.download_file(file_info.file_path)
             
+            # Save downloaded bytes to a temporary file for processing
+            file_extension = os.path.splitext(message.document.file_name)[1].lower()
+            temp_file_path = f"temp_{message.chat.id}_{message.document.file_id}{file_extension}"
+            with open(temp_file_path, 'wb') as f:
+                f.write(downloaded)
+            
             # Use document service to process
-            response = DocumentService.process_document(message.document.file_name, downloaded)
-            send_ai_response(bot, message, response)
+            content = document_service.process_document(temp_file_path)
+            
+            if content == "รูปแบบไฟล์ไม่รองรับ":
+                send_ai_response(bot, message, "ขออภัยครับ รูปแบบไฟล์ไม่รองรับ")
+                return
+                
+            # Form prompt with caption if provided, or default to asking for analysis
+            user_query = message.caption or "ช่วยสรุปหรือวิเคราะห์ไฟล์นี้"
+            prompt = f"ชื่อไฟล์: {message.document.file_name}\n\nเนื้อหา:\n{content}\n\nคำถาม: {user_query}"
+            
+            response = execute_task("chat", text=prompt, chat_id=str(message.chat.id))
+            send_ai_response(bot, message, str(response))
         except Exception as e:
             logging.exception("DOCUMENT_FAILED")
             send_ai_response(bot, message, "เกิดข้อผิดพลาดในการประมวลผลเอกสาร")
+        finally:
+            if temp_file_path and os.path.exists(temp_file_path):
+                try:
+                    os.remove(temp_file_path)
+                except Exception:
+                    pass
 
     @bot.message_handler(content_types=['voice', 'audio'])
     def handle_voice(message):
