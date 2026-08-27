@@ -9,11 +9,14 @@ class MemoryStore:
 
     def _init_db(self):
         with sqlite3.connect(self.db_path) as conn:
+            # Table for individual messages/memories
             conn.execute("""
                 CREATE TABLE IF NOT EXISTS memories (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
                     user_id TEXT,
                     chat_id TEXT,
+                    message_id TEXT,
+                    role TEXT,
                     text TEXT,
                     category TEXT,
                     importance INTEGER,
@@ -21,6 +24,7 @@ class MemoryStore:
                     updated_at TIMESTAMP
                 )
             """)
+            # Table for conversation summaries
             conn.execute("""
                 CREATE TABLE IF NOT EXISTS summaries (
                     chat_id TEXT PRIMARY KEY,
@@ -43,24 +47,26 @@ class MemoryStore:
             row = cursor.fetchone()
             return row[0] if row else None
 
-    def save_memory(self, user_id, chat_id, text, category="general", importance=1):
+    def save_memory(self, user_id, chat_id, message_id, role, text, category="general", importance=1):
         now = datetime.datetime.now()
         with sqlite3.connect(self.db_path) as conn:
             conn.execute("""
-                INSERT INTO memories (user_id, chat_id, text, category, importance, created_at, updated_at)
-                VALUES (?, ?, ?, ?, ?, ?, ?)
-            """, (user_id, chat_id, text, category, importance, now, now))
+                INSERT INTO memories (user_id, chat_id, message_id, role, text, category, importance, created_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            """, (user_id, chat_id, message_id, role, text, category, importance, now))
 
     def search_memory(self, user_id, chat_id, query):
-        # Basic keyword search; can be upgraded to vector search later
         with sqlite3.connect(self.db_path) as conn:
+            # Re-verify schema for 'role' or just select text
+            # Assuming we want to search text, role was apparently not in the original table
             cursor = conn.execute("""
                 SELECT text FROM memories 
                 WHERE user_id = ? AND chat_id = ? AND text LIKE ?
-                ORDER BY importance DESC, updated_at DESC
-                LIMIT 5
+                ORDER BY created_at DESC
+                LIMIT 10
             """, (user_id, chat_id, f"%{query}%"))
-            return [row[0] for row in cursor.fetchall()]
+            # Just return text as a string/dict
+            return [{"role": "assistant", "text": row[0]} for row in cursor.fetchall()]
 
     def list_memories(self, user_id, chat_id):
         with sqlite3.connect(self.db_path) as conn:
@@ -79,3 +85,4 @@ class MemoryStore:
         with sqlite3.connect(self.db_path) as conn:
             conn.execute("DELETE FROM memories WHERE user_id = ? AND chat_id = ?", 
                          (user_id, chat_id))
+

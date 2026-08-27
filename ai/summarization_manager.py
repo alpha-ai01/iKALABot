@@ -33,7 +33,7 @@ class SummarizationManager:
         # Add existing memory
         relevant_memories = memory_store.search_memory(user_id="user", chat_id=chat_id, query=prompt)
         if relevant_memories:
-            context += "\n\nRelevant Context:\n" + "\n".join(relevant_memories)
+            context += "\n\nRelevant Context:\n" + "\n".join([f"{m['role']}: {m['text']}" for m in relevant_memories])
         
         # Add summary
         summary = memory_store.get_summary(chat_id)

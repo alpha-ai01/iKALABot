@@ -4,6 +4,7 @@ import logging
 import os
 import abc
 from typing import List, Dict
+import requests
 
 from utils.file_handler import read_file_range, targeted_edit, get_file_type
 
@@ -37,9 +38,28 @@ class GoogleSearchProvider(SearchProvider):
         self.engine_id = engine_id
 
     def search(self, query: str, max_results: int) -> List[Dict[str, str]]:
-        # TODO: Implement actual Google Search API call with quota check
-        logging.info("Google Search API called.")
-        return []
+        url = "https://www.googleapis.com/customsearch/v1"
+        params = {
+            "key": self.api_key,
+            "cx": self.engine_id,
+            "q": query,
+            "num": max_results
+        }
+        try:
+            response = requests.get(url, params=params)
+            response.raise_for_status()
+            data = response.json()
+            items = data.get("items", [])
+            return [{'title': item['title'], 'body': item.get('snippet', ''), 'href': item['link']} for item in items]
+        except requests.exceptions.HTTPError as e:
+            if response.status_code == 429:
+                logging.error("Google Search API quota exceeded.")
+            else:
+                logging.error(f"Google Search API error: {e}")
+            return []
+        except Exception as e:
+            logging.error(f"Google Search API failed: {e}")
+            return []
 
 class SearchRouter:
     def __init__(self):
@@ -75,10 +95,11 @@ def validate_path(file_path):
     return abs_path
 
 def get_current_time():
-    # TODO: Implement Thai format as per requirements
     tz = pytz.timezone('Asia/Bangkok')
     now = datetime.now(tz)
-    return now.strftime("ขณะนี้เวลา %H:%M น. ของวันที่ %d/%m/%Y")
+    # Thai Buddhist Era year = Gregorian year + 543
+    thai_year = now.year + 543
+    return now.strftime(f"ขณะนี้เวลา %H:%M น. ของวันที่ %d/%m/{thai_year}")
 
 def read_file_tool(file_path, start_line=1, end_line=None):
     try:

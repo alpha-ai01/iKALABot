@@ -9,3 +9,4 @@ gTTS
 pypdf
 python-docx
 openpyxl
+python-dotenv

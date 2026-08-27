@@ -8,7 +8,7 @@ logger = logging.getLogger(__name__)
 
 class AIGateway:
     @staticmethod
-    def _construct_payload(prompt: str, model_id: str, images: list = None, chat_id: str = None):
+    def _construct_payload(prompt: str, model_id: str, images: list = None, chat_id: str = None, response_format: dict = None):
         final_prompt = prompt + SummarizationManager.get_context(chat_id, prompt)
         
         # 2. Payload Construction
@@ -23,10 +23,13 @@ class AIGateway:
         else:
             messages = [{"role": "user", "content": final_prompt}]
             
-        return {"model": model_id, "messages": messages}
+        payload = {"model": model_id, "messages": messages}
+        if response_format:
+            payload["response_format"] = response_format
+        return payload
 
     @staticmethod
-    def call_ai(prompt: str, capability: str = "text", images: list = None, chat_id: str = None) -> str:
+    def call_ai(prompt: str, capability: str = "text", images: list = None, chat_id: str = None, response_format: dict = None) -> str:
         logger.info(f"[Gateway] Request: capability={capability}")
         
         # 1. Get all available free models for fallback
@@ -38,7 +41,7 @@ class AIGateway:
             if chat_id:
                 SummarizationManager.trigger(chat_id, prompt)
             
-            payload = AIGateway._construct_payload(prompt, model_id, images, chat_id)
+            payload = AIGateway._construct_payload(prompt, model_id, images, chat_id, response_format)
             
             response = OpenRouterClient.call_model(model_id, payload)
             if response:
