@@ -12,18 +12,31 @@ TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN", "")
 DISCORD_BOT_TOKEN = os.getenv("DISCORD_BOT_TOKEN", "")
 LANGUAGE = os.getenv("LANGUAGE", "en-th")
 
-# Unified Model Configuration Structure
-MODEL_CONFIG = {
-    "GEMINI_CONFIG": {
-        "primary": os.getenv("GEMINI_MODEL", "gemini-1.5-flash"),
-        "fallback": os.getenv("GEMINI_FALLBACK_MODEL", "gemini-1.5-flash"),
-        "vision": os.getenv("GEMINI_VISION_MODEL", "gemini-1.5-flash"),
-    },
-    "OPENROUTER": {
-        "primary": os.getenv("OPENROUTER_MODEL", "google/gemini-2.0-flash-lite-preview-02-05:free"),
-        "reasoning": os.getenv("OPENROUTER_REASONING_MODEL", "meta-llama/llama-3.1-8b-instruct:free"),
-    }
-}
+import json
+
+# Load Model Configuration
+def load_model_config():
+    config_path = "config/models.json"
+    try:
+        with open(config_path, 'r') as f:
+            config = json.load(f)
+    except FileNotFoundError:
+        logger.error(f"Configuration file not found: {config_path}")
+        raise
+    
+    # Apply environment variable overrides
+    if "GEMINI_CONFIG" in config:
+        config["GEMINI_CONFIG"]["primary"] = os.getenv("GEMINI_MODEL", config["GEMINI_CONFIG"]["primary"])
+        config["GEMINI_CONFIG"]["fallback"] = os.getenv("GEMINI_FALLBACK_MODEL", config["GEMINI_CONFIG"]["fallback"])
+        config["GEMINI_CONFIG"]["vision"] = os.getenv("GEMINI_VISION_MODEL", config["GEMINI_CONFIG"]["vision"])
+    
+    if "OPENROUTER" in config:
+        config["OPENROUTER"]["primary"] = os.getenv("OPENROUTER_MODEL", config["OPENROUTER"]["primary"])
+        config["OPENROUTER"]["reasoning"] = os.getenv("OPENROUTER_REASONING_MODEL", config["OPENROUTER"]["reasoning"])
+        
+    return config
+
+MODEL_CONFIG = load_model_config()
 
 def validate_config():
     """Validate that configured models are free."""
@@ -41,9 +54,12 @@ def validate_config():
     
     logger.info("✓ All configured OpenRouter models are free.")
 
+import sys
+
 # Run validation on import
 try:
     if OPENROUTER_API_KEY:
         validate_config()
 except Exception as e:
     logger.error(f"Configuration validation failed: {e}")
+    sys.exit(1)
