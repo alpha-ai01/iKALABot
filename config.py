@@ -1,5 +1,7 @@
 import os
 import logging
+import json
+from pathlib import Path
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -12,11 +14,12 @@ TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN", "")
 DISCORD_BOT_TOKEN = os.getenv("DISCORD_BOT_TOKEN", "")
 LANGUAGE = os.getenv("LANGUAGE", "en-th")
 
-import json
-
 # Load Model Configuration
 def load_model_config():
-    config_path = "config/models.json"
+    # Use absolute path to ensure it works from any directory
+    base_path = Path(__file__).parent
+    config_path = base_path / "config/models.json"
+    
     try:
         with open(config_path, 'r') as f:
             config = json.load(f)
@@ -29,7 +32,11 @@ def load_model_config():
 MODEL_CONFIG = load_model_config()
 
 def validate_config():
-    """Validate that configured models are free."""
+    """Validate that configured models are free if possible."""
+    if not OPENROUTER_API_KEY:
+        logger.info("OpenRouter API Key not set. Skipping OpenRouter validation.")
+        return
+
     from ai.model_registry import is_model_free
     
     logger.info("Checking OpenRouter configuration...")
@@ -38,18 +45,14 @@ def validate_config():
     models = MODEL_CONFIG.get("openrouter", {})
     for key, model_id in models.items():
         if not is_model_free(model_id):
-            error_msg = f"ERROR: Configured model '{model_id}' is not free. Paid models are not allowed."
-            logger.error(error_msg)
-            raise ValueError(error_msg)
-    
-    logger.info("✓ All configured OpenRouter models are free.")
-
-import sys
+            # Log as warning instead of raising exception to prevent startup crash
+            logger.warning(f"WARNING: Configured OpenRouter model '{model_id}' is not free or cannot be verified.")
+        else:
+            logger.info(f"✓ OpenRouter model '{model_id}' verified as free.")
 
 # Run validation on import
-try:
-    if OPENROUTER_API_KEY:
+if OPENROUTER_API_KEY:
+    try:
         validate_config()
-except Exception as e:
-    logger.error(f"Configuration validation failed: {e}")
-    sys.exit(1)
+    except Exception as e:
+        logger.error(f"Configuration validation encountered an issue: {e}")

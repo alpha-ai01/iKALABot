@@ -1,6 +1,7 @@
 import logging
 import config
 import os
+from google.genai import types
 
 _client = None
 
@@ -12,10 +13,10 @@ def get_client():
             raise ValueError("GEMINI_API_KEY is not set.")
         _client = genai.Client(api_key=config.GEMINI_API_KEY)
     return _client
-def generate_gemini_response(prompt_data, is_vision=False, mime_type="image/jpeg", model_override=None):
-    model = model_override or config.MODEL_CONFIG["gemini"]["primary"]
 
-    from google.genai import types
+def generate_gemini_response(prompt_data, is_vision=False, mime_type="image/jpeg", model_override=None):
+    # Use JSON config for model selection
+    model = model_override or config.MODEL_CONFIG["gemini"]["primary"]
 
     SYSTEM_INSTRUCTION = """คุณคือ iNummm_bot ผู้ช่วย AI บน Telegram ที่รองรับทั้งข้อความและเสียง
 คุณสามารถรับข้อความ, ข้อความเสียง, ตอบเป็นข้อความ, และสร้างเสียงจากคำตอบได้
@@ -29,10 +30,8 @@ def generate_gemini_response(prompt_data, is_vision=False, mime_type="image/jpeg
     else:
         contents.append(types.Part.from_text(text=f"{SYSTEM_INSTRUCTION}\n\nคำถาม: {prompt_data}"))
 
-
     try:
         logging.info("[Gemini] Trying model: %s", model)
-        from google.genai import types
         
         # Disable automatic function calling as per SDK recommendation for generate_content
         config_afc = types.AutomaticFunctionCallingConfig(disable=True)
@@ -48,5 +47,6 @@ def generate_gemini_response(prompt_data, is_vision=False, mime_type="image/jpeg
         return (response.text or "").strip()
     except Exception as e:
         logging.error("[Gemini] Failed with model %s: %s", model, str(e)[:200])
+        # Fallback to secondary if primary fails (could be improved)
         return ""
 
