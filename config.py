@@ -24,16 +24,6 @@ def load_model_config():
         logger.error(f"Configuration file not found: {config_path}")
         raise
     
-    # Apply environment variable overrides
-    if "GEMINI_CONFIG" in config:
-        config["GEMINI_CONFIG"]["primary"] = os.getenv("GEMINI_MODEL", config["GEMINI_CONFIG"]["primary"])
-        config["GEMINI_CONFIG"]["fallback"] = os.getenv("GEMINI_FALLBACK_MODEL", config["GEMINI_CONFIG"]["fallback"])
-        config["GEMINI_CONFIG"]["vision"] = os.getenv("GEMINI_VISION_MODEL", config["GEMINI_CONFIG"]["vision"])
-    
-    if "OPENROUTER" in config:
-        config["OPENROUTER"]["primary"] = os.getenv("OPENROUTER_MODEL", config["OPENROUTER"]["primary"])
-        config["OPENROUTER"]["reasoning"] = os.getenv("OPENROUTER_REASONING_MODEL", config["OPENROUTER"]["reasoning"])
-        
     return config
 
 MODEL_CONFIG = load_model_config()

@@ -5,7 +5,7 @@
     "vision": "gemini-3.1-flash-lite"
   },
   "OPENROUTER": {
-    "primary": "meta-llama/llama-3.1-8b-instruct:free",
+    "primary": "google/gemma-4-31b-it:free",
     "reasoning": "thinkingmachines/inkling:free"
   }
 }
