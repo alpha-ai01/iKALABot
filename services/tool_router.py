@@ -6,10 +6,10 @@ from services import document_service
 class ToolRouter:
     def route(self, task, text=None, **kwargs):
         if task == "time":
-            return self._handle_time(kwargs.get("timezone", "Asia/Bangkok"))
+            return tools.get_current_time()
         elif task == "search":
             return tools.search_web(text)
-        elif task == "read_file":
+# ... rest of file
             return tools.read_file_tool(kwargs.get("file_path"), kwargs.get("start_line", 1), kwargs.get("end_line"))
         elif task == "edit_file":
             return tools.edit_file_tool(kwargs.get("file_path"), kwargs.get("search_pattern"), kwargs.get("new_content"))

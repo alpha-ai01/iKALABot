@@ -7,8 +7,14 @@ import openpyxl
 def process_document(file_path):
     ext = os.path.splitext(file_path)[1].lower()
     
-    if ext == '.txt':
-        with open(file_path, 'r', encoding='utf-8') as f:
+    # Text-based source/doc formats
+    text_formats = {
+        '.txt', '.md', '.py', '.js', '.mjs', '.ts', '.tsx', '.css', '.html', '.htm',
+        '.json', '.xml', '.yaml', '.yml'
+    }
+    
+    if ext in text_formats:
+        with open(file_path, 'r', encoding='utf-8', errors='ignore') as f:
             return f.read()
             
     elif ext == '.pdf':
@@ -28,7 +34,7 @@ def process_document(file_path):
             return "\n".join([",".join(row) for row in reader])
             
     elif ext == '.xlsx':
-        wb = openpyxl.load_workbook(file_path)
+        wb = openpyxl.load_workbook(file_path, data_only=True)
         text = ""
         for sheet in wb.worksheets:
             text += f"Sheet: {sheet.title}\n"
