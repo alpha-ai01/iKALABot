@@ -30,23 +30,43 @@ def set_voice_enabled(user_id: str, enabled: bool):
 def send_ai_response(bot: TeleBot, message, response_text: str):
     """
     Centralized response sender that handles text and voice.
+    Split long text responses into multiple messages to avoid Telegram limits.
     """
-    # 1. Send Text
-    bot.reply_to(message, response_text)
+    MAX_LENGTH = 4000
     
-    # 2. TTS (if enabled for user)
-    if is_voice_enabled(message.from_user.id):
-        try:
-            # Clean text for TTS
-            tts_text = clean_ai_response(response_text)
-            audio_path = text_to_speech(tts_text)
+    # 1. Send Text (Split if necessary)
+    if len(response_text) > MAX_LENGTH:
+        # Split by newlines if possible, otherwise by character count
+        parts = []
+        lines = response_text.split('\n')
+        current_part = ""
+        for line in lines:
+            if len(current_part) + len(line) + 1 > MAX_LENGTH:
+                parts.append(current_part)
+                current_part = line
+            else:
+                current_part = (current_part + '\n' + line) if current_part else line
+        if current_part:
+            parts.append(current_part)
+        
+        for part in parts:
+            if part.strip():
+                bot.reply_to(message, part)
+    else:
+        bot.reply_to(message, response_text)
+    
+    # 2. TTS (Always attempted, failure shouldn't stop text delivery)
+    try:
+        # Clean text for TTS
+        tts_text = clean_ai_response(response_text)
+        audio_path = text_to_speech(tts_text)
+        
+        if audio_path:
+            with open(audio_path, "rb") as audio:
+                bot.send_voice(message.chat.id, audio)
             
-            if audio_path:
-                with open(audio_path, "rb") as audio:
-                    bot.send_voice(message.chat.id, audio)
-                
-                # Cleanup
-                if os.path.exists(audio_path):
-                    os.remove(audio_path)
-        except Exception as e:
-            logging.error("TTS failed in response manager: %s", str(e))
+            # Cleanup
+            if os.path.exists(audio_path):
+                os.remove(audio_path)
+    except Exception as e:
+        logging.error("TTS failed in response manager: %s", str(e))

@@ -1,11 +1,11 @@
 {
-  "GEMINI_CONFIG": {
+  "gemini": {
     "primary": "gemini-3.1-flash-lite",
     "fallback": "gemini-3.5-flash-lite",
     "vision": "gemini-3.1-flash-lite"
   },
-  "OPENROUTER": {
-    "primary": "google/gemma-4-31b-it:free",
+  "openrouter": {
+    "primary": "meta-llama/llama-3.1-8b-instruct:free",
     "reasoning": "thinkingmachines/inkling:free"
   }
 }

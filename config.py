@@ -34,8 +34,8 @@ def validate_config():
     
     logger.info("Checking OpenRouter configuration...")
     
-    # Check OPENROUTER models only
-    models = MODEL_CONFIG.get("OPENROUTER", {})
+    # Check OPENROUTER models
+    models = MODEL_CONFIG.get("openrouter", {})
     for key, model_id in models.items():
         if not is_model_free(model_id):
             error_msg = f"ERROR: Configured model '{model_id}' is not free. Paid models are not allowed."

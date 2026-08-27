@@ -1,6 +1,7 @@
 import telebot
 import logging
 import os
+import tempfile
 from dispatcher import execute_task
 from utils.response_manager import send_ai_response
 from services.voice_service import VoiceService
@@ -39,40 +40,40 @@ def init_handlers(bot_instance):
     @bot.message_handler(content_types=['document'])
     def handle_document(message):
         logging.info("DOCUMENT_RECEIVED")
-        temp_file_path = None
         try:
             bot.send_chat_action(message.chat.id, 'typing')
             file_info = bot.get_file(message.document.file_id)
             downloaded = bot.download_file(file_info.file_path)
             
-            # Save downloaded bytes to a temporary file for processing
+            # Create a secure temporary file
             file_extension = os.path.splitext(message.document.file_name)[1].lower()
-            temp_file_path = f"temp_{message.chat.id}_{message.document.file_id}{file_extension}"
-            with open(temp_file_path, 'wb') as f:
-                f.write(downloaded)
+            with tempfile.NamedTemporaryFile(delete=False, suffix=file_extension) as tmp:
+                tmp.write(downloaded)
+                temp_file_path = tmp.name
             
             # Use document service to process
-            content = document_service.process_document(temp_file_path)
+            content_chunks = document_service.process_document(temp_file_path)
             
-            if content == "รูปแบบไฟล์ไม่รองรับ":
+            if content_chunks == ["รูปแบบไฟล์ไม่รองรับ"]:
                 send_ai_response(bot, message, "ขออภัยครับ รูปแบบไฟล์ไม่รองรับ")
                 return
                 
-            # Form prompt with caption if provided, or default to asking for analysis
-            user_query = message.caption or "ช่วยสรุปหรือวิเคราะห์ไฟล์นี้"
-            prompt = f"ชื่อไฟล์: {message.document.file_name}\n\nเนื้อหา:\n{content}\n\nคำถาม: {user_query}"
-            
-            response = execute_task("chat", text=prompt, chat_id=str(message.chat.id))
-            send_ai_response(bot, message, str(response))
+            # Process each chunk
+            for i, chunk in enumerate(content_chunks):
+                user_query = message.caption or "ช่วยสรุปหรือวิเคราะห์ไฟล์นี้"
+                if len(content_chunks) > 1:
+                    prompt = f"ชื่อไฟล์: {message.document.file_name} (ส่วนที่ {i+1}/{len(content_chunks)})\n\nเนื้อหา:\n{chunk}\n\nคำถาม: {user_query} (โปรดวิเคราะห์ส่วนนี้)"
+                else:
+                    prompt = f"ชื่อไฟล์: {message.document.file_name}\n\nเนื้อหา:\n{chunk}\n\nคำถาม: {user_query}"
+                
+                response = execute_task("chat", text=prompt, chat_id=str(message.chat.id))
+                send_ai_response(bot, message, str(response))
         except Exception as e:
             logging.exception("DOCUMENT_FAILED")
             send_ai_response(bot, message, "เกิดข้อผิดพลาดในการประมวลผลเอกสาร")
         finally:
-            if temp_file_path and os.path.exists(temp_file_path):
-                try:
-                    os.remove(temp_file_path)
-                except Exception:
-                    pass
+            if 'temp_file_path' in locals() and os.path.exists(temp_file_path):
+                os.remove(temp_file_path)
 
     @bot.message_handler(content_types=['voice', 'audio'])
     def handle_voice(message):

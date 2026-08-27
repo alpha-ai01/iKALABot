@@ -4,7 +4,7 @@ from pypdf import PdfReader
 from docx import Document
 import openpyxl
 
-def process_document(file_path):
+def process_document(file_path, chunk_size=30000):
     ext = os.path.splitext(file_path)[1].lower()
     
     # Text-based source/doc formats
@@ -13,34 +13,40 @@ def process_document(file_path):
         '.json', '.xml', '.yaml', '.yml'
     }
     
+    content = ""
     if ext in text_formats:
         with open(file_path, 'r', encoding='utf-8', errors='ignore') as f:
-            return f.read()
+            content = f.read()
             
     elif ext == '.pdf':
         reader = PdfReader(file_path)
-        text = ""
         for page in reader.pages:
-            text += page.extract_text() + "\n"
-        return text
+            content += page.extract_text() + "\n"
         
     elif ext == '.docx':
         doc = Document(file_path)
-        return "\n".join([p.text for p in doc.paragraphs])
+        content = "\n".join([p.text for p in doc.paragraphs])
         
     elif ext == '.csv':
         with open(file_path, 'r', encoding='utf-8') as f:
             reader = csv.reader(f)
-            return "\n".join([",".join(row) for row in reader])
+            content = "\n".join([",".join(row) for row in reader])
             
     elif ext == '.xlsx':
         wb = openpyxl.load_workbook(file_path, data_only=True)
-        text = ""
         for sheet in wb.worksheets:
-            text += f"Sheet: {sheet.title}\n"
+            content += f"Sheet: {sheet.title}\n"
             for row in sheet.iter_rows(values_only=True):
-                text += ",".join([str(cell) for cell in row if cell is not None]) + "\n"
-        return text
+                content += ",".join([str(cell) for cell in row if cell is not None]) + "\n"
         
     else:
-        return "รูปแบบไฟล์ไม่รองรับ"
+        return ["รูปแบบไฟล์ไม่รองรับ"]
+        
+    # Split content into chunks
+    if not content:
+        return []
+        
+    chunks = []
+    for i in range(0, len(content), chunk_size):
+        chunks.append(content[i:i+chunk_size])
+    return chunks

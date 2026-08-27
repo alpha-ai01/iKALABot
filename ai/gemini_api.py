@@ -13,7 +13,7 @@ def get_client():
         _client = genai.Client(api_key=config.GEMINI_API_KEY)
     return _client
 def generate_gemini_response(prompt_data, is_vision=False, mime_type="image/jpeg", model_override=None):
-    model = model_override or config.MODEL_CONFIG["GEMINI_CONFIG"]["primary"]
+    model = model_override or config.MODEL_CONFIG["gemini"]["primary"]
 
     from google.genai import types
 
