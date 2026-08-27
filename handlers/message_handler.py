@@ -10,6 +10,63 @@ from services import document_service
 # Bot instance will be initialized in main.py
 bot = None
 
+def handle_document(message):
+    logging.info("DOCUMENT_RECEIVED")
+    
+    SAFE_LIMIT_MB = 19
+    SAFE_LIMIT_BYTES = SAFE_LIMIT_MB * 1024 * 1024
+    
+    # 1. Pre-check file size if available
+    file_size = message.document.file_size
+    if file_size and file_size > SAFE_LIMIT_BYTES:
+        error_msg = f"ขออภัยครับ ไฟล์ใหญ่เกินขนาดที่ระบบรับได้ (ได้รับ {round(file_size/(1024*1024), 2)} MB, จำกัดที่ {SAFE_LIMIT_MB} MB). กรุณาแบ่งไฟล์หรือลดขนาดก่อนส่งครับ"
+        logging.warning(f"DOCUMENT_REJECTED_FILE_TOO_LARGE: {file_size} bytes (Limit: {SAFE_LIMIT_BYTES} bytes)")
+        send_ai_response(bot, message, error_msg)
+        return
+
+    try:
+        bot.send_chat_action(message.chat.id, 'typing')
+        file_info = bot.get_file(message.document.file_id)
+        downloaded = bot.download_file(file_info.file_path)
+        
+        # Create a secure temporary file
+        file_extension = os.path.splitext(message.document.file_name)[1].lower()
+        with tempfile.NamedTemporaryFile(delete=False, suffix=file_extension) as tmp:
+            tmp.write(downloaded)
+            temp_file_path = tmp.name
+        
+        # Use document service to process
+        content_chunks = document_service.process_document(temp_file_path)
+        
+        if content_chunks == ["รูปแบบไฟล์ไม่รองรับ"]:
+            send_ai_response(bot, message, "ขออภัยครับ รูปแบบไฟล์ไม่รองรับ")
+            return
+            
+        # Process each chunk
+        for i, chunk in enumerate(content_chunks):
+            user_query = message.caption or "ช่วยสรุปหรือวิเคราะห์ไฟล์นี้"
+            if len(content_chunks) > 1:
+                prompt = f"ชื่อไฟล์: {message.document.file_name} (ส่วนที่ {i+1}/{len(content_chunks)})\n\nเนื้อหา:\n{chunk}\n\nคำถาม: {user_query} (โปรดวิเคราะห์ส่วนนี้)"
+            else:
+                prompt = f"ชื่อไฟล์: {message.document.file_name}\n\nเนื้อหา:\n{chunk}\n\nคำถาม: {user_query}"
+            
+            response = execute_task("chat", text=prompt, chat_id=str(message.chat.id))
+            send_ai_response(bot, message, str(response))
+    except telebot.apihelper.ApiTelegramException as e:
+        if "file is too big" in str(e).lower():
+            error_msg = f"ขออภัยครับ ไฟล์ใหญ่เกินขนาดที่ Bot ดาวน์โหลดได้ ({SAFE_LIMIT_MB} MB). กรุณาแบ่งไฟล์หรือลดขนาดก่อนส่งครับ"
+            logging.warning(f"DOCUMENT_REJECTED_FILE_TOO_LARGE_API: {str(e)}")
+            send_ai_response(bot, message, error_msg)
+        else:
+            logging.exception("DOCUMENT_FAILED")
+            send_ai_response(bot, message, "เกิดข้อผิดพลาดในการประมวลผลเอกสาร")
+    except Exception as e:
+        logging.exception("DOCUMENT_FAILED")
+        send_ai_response(bot, message, "เกิดข้อผิดพลาดในการประมวลผลเอกสาร")
+    finally:
+        if 'temp_file_path' in locals() and os.path.exists(temp_file_path):
+            os.remove(temp_file_path)
+
 def init_handlers(bot_instance):
     global bot
     bot = bot_instance
@@ -38,42 +95,8 @@ def init_handlers(bot_instance):
         send_ai_response(bot, message, str(response))
 
     @bot.message_handler(content_types=['document'])
-    def handle_document(message):
-        logging.info("DOCUMENT_RECEIVED")
-        try:
-            bot.send_chat_action(message.chat.id, 'typing')
-            file_info = bot.get_file(message.document.file_id)
-            downloaded = bot.download_file(file_info.file_path)
-            
-            # Create a secure temporary file
-            file_extension = os.path.splitext(message.document.file_name)[1].lower()
-            with tempfile.NamedTemporaryFile(delete=False, suffix=file_extension) as tmp:
-                tmp.write(downloaded)
-                temp_file_path = tmp.name
-            
-            # Use document service to process
-            content_chunks = document_service.process_document(temp_file_path)
-            
-            if content_chunks == ["รูปแบบไฟล์ไม่รองรับ"]:
-                send_ai_response(bot, message, "ขออภัยครับ รูปแบบไฟล์ไม่รองรับ")
-                return
-                
-            # Process each chunk
-            for i, chunk in enumerate(content_chunks):
-                user_query = message.caption or "ช่วยสรุปหรือวิเคราะห์ไฟล์นี้"
-                if len(content_chunks) > 1:
-                    prompt = f"ชื่อไฟล์: {message.document.file_name} (ส่วนที่ {i+1}/{len(content_chunks)})\n\nเนื้อหา:\n{chunk}\n\nคำถาม: {user_query} (โปรดวิเคราะห์ส่วนนี้)"
-                else:
-                    prompt = f"ชื่อไฟล์: {message.document.file_name}\n\nเนื้อหา:\n{chunk}\n\nคำถาม: {user_query}"
-                
-                response = execute_task("chat", text=prompt, chat_id=str(message.chat.id))
-                send_ai_response(bot, message, str(response))
-        except Exception as e:
-            logging.exception("DOCUMENT_FAILED")
-            send_ai_response(bot, message, "เกิดข้อผิดพลาดในการประมวลผลเอกสาร")
-        finally:
-            if 'temp_file_path' in locals() and os.path.exists(temp_file_path):
-                os.remove(temp_file_path)
+    def handle_document_wrapper(message):
+        handle_document(message)
 
     @bot.message_handler(content_types=['voice', 'audio'])
     def handle_voice(message):
