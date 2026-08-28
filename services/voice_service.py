@@ -30,9 +30,9 @@ class VoiceService:
             return "" # Returning empty string triggers text fallback in handlers
 
     @staticmethod
-    def speech_to_text(audio_bytes: bytes) -> str:
+    def speech_to_text(audio_bytes: bytes, mime_type: str = "audio/ogg") -> str:
         """Placeholder for STT implementation, unified from voice/speech_to_text.py"""
         # Note: Implement actual STT logic here if not already present
         # Or delegate to the existing voice/speech_to_text.py
         from voice.speech_to_text import speech_to_text
-        return speech_to_text(audio_bytes)
+        return speech_to_text(audio_bytes, mime_type=mime_type)

@@ -103,9 +103,21 @@ def init_handlers(bot_instance):
         logging.info("VOICE_RECEIVED")
         try:
             bot.send_chat_action(message.chat.id, 'typing')
-            file_info = bot.get_file(message.voice.file_id if message.voice else message.audio.file_id)
+            
+            # Determine file info, mime type
+            if message.voice:
+                file_id = message.voice.file_id
+                mime_type = getattr(message.voice, 'mime_type', 'audio/ogg')
+            elif message.audio:
+                file_id = message.audio.file_id
+                mime_type = getattr(message.audio, 'mime_type', None)
+                if not mime_type:
+                    send_ai_response(bot, message, "ไม่สามารถรับไฟล์เสียงนี้ได้ (ขาด MIME type)")
+                    return
+            
+            file_info = bot.get_file(file_id)
             downloaded = bot.download_file(file_info.file_path)
-            transcript = VoiceService.speech_to_text(downloaded)
+            transcript = VoiceService.speech_to_text(downloaded, mime_type=mime_type)
             
             if not transcript:
                 send_ai_response(bot, message, "ไม่สามารถถอดเสียงได้")

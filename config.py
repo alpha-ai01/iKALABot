@@ -31,6 +31,12 @@ def load_model_config():
 
 MODEL_CONFIG = load_model_config()
 
+# Validate and set specific model constants
+if "gemini" not in MODEL_CONFIG or "audio" not in MODEL_CONFIG["gemini"]:
+    raise RuntimeError("Missing required model configuration: gemini.audio in config/models.json")
+
+VOICE_GEMINI_MODEL = MODEL_CONFIG["gemini"]["audio"]
+
 def validate_config():
     """Validate that configured models are free if possible."""
     if not OPENROUTER_API_KEY:

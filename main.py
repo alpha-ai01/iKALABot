@@ -12,6 +12,7 @@ app = Flask(__name__)
 
 # Keep reference to bot thread
 bot_thread = None
+polling_started = False
 
 @app.route('/')
 def root():
@@ -29,18 +30,37 @@ def health_check():
 # 2. Telegram Bot Setup
 # ==========================================
 def run_bot(token):
-    while True:
-        try:
-            bot = telebot.TeleBot(token)
-            init_handlers(bot)
+    global polling_started
+    import os
+    pid = os.getpid()
+    
+    if polling_started:
+        print(f"[Telegram][CRITICAL] Duplicate polling startup prevented. PID={pid}")
+        return
+    
+    polling_started = True
+    print(f"[Telegram] Polling started. PID={pid}")
+    
+    try:
+        bot = telebot.TeleBot(token)
+        init_handlers(bot)
 
-            print("Clearing old webhooks...")
-            bot.remove_webhook()
-            print("Starting Telegram Bot Polling...")
-            bot.infinity_polling(timeout=10, long_polling_timeout=5, skip_pending=True)
-        except Exception as e:
-            print(f"[Polling Error]: {e}. Restarting in 5s...")
-            time.sleep(5)
+        print("Clearing old webhooks...")
+        bot.remove_webhook()
+        print("Starting Telegram Bot Polling...")
+        bot.infinity_polling(timeout=10, long_polling_timeout=5, skip_pending=True)
+    except Exception as e:
+        error_msg = str(e)
+        if "409" in error_msg or "Conflict" in error_msg:
+            print(f"[Telegram][CRITICAL] 409 Conflict detected. PID={pid}")
+            print("[Telegram][CRITICAL] Another getUpdates consumer is active.")
+            print("[Telegram][CRITICAL] Polling stopped; no automatic retry.")
+            return
+        
+        print(f"[Polling Error]: {e}. Restarting in 5s...")
+        polling_started = False
+        time.sleep(5)
+        run_bot(token)
 
 def run_web(port):
     # Disable reloader to prevent double polling
