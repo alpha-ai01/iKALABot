@@ -14,8 +14,8 @@ def ask_openrouter(prompt: str) -> str:
         "Content-Type": "application/json"
     }
     payload = {
-        # เปลี่ยนรหัสโมเดลเป็นตัวที่ OpenRouter รองรับและเปิดให้ใช้ฟรี
-        "model": "meta-llama/llama-3.1-8b-instruct:free",
+        # ใช้รหัสโมเดลจาก config
+        "model": config.MODEL_CONFIG["OPENROUTER"]["primary"],
         "messages": [{"role": "user", "content": prompt}]
     }
     
@@ -46,9 +46,9 @@ def generate_openrouter_response(prompt, is_reasoning=False, stream=False):
     Returns response content string.
     """
     if is_reasoning:
-        model = config.MODEL_CONFIG["OPENROUTER"]["reasoning"]
+        model = config.MODEL_CONFIG["openrouter"]["reasoning"]
     else:
-        model = config.MODEL_CONFIG["OPENROUTER"]["primary"]
+        model = config.MODEL_CONFIG["openrouter"]["primary"]
 
     headers = {
         "Authorization": f"Bearer {config.OPENROUTER_API_KEY}",

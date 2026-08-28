@@ -6,7 +6,7 @@
     "audio": "gemini-3.1-flash-lite"
   },
   "openrouter": {
-    "primary": "meta-llama/llama-3.1-8b-instruct:free",
+    "primary": "nvidia/nemotron-3.5-lightning:free",
     "reasoning": "thinkingmachines/inkling:free"
   }
 }
