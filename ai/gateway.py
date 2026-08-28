@@ -1,27 +1,23 @@
 import logging
 import base64
-from ai.model_registry import get_free_models
+import config
 from ai.summarization_manager import SummarizationManager
 from ai.openrouter_client import OpenRouterClient
+from ai.gemini_api import generate_gemini_response
 
 logger = logging.getLogger(__name__)
 
 class AIGateway:
     @staticmethod
-    def _construct_payload(prompt: str, model_id: str, images: list = None, chat_id: str = None, response_format: dict = None):
-        final_prompt = prompt + SummarizationManager.get_context(chat_id, prompt)
-        
-        # 2. Payload Construction
+    def _construct_payload(prompt: str, model_id: str, images: list = None, response_format: dict = None):
+        # Context is already appended by the caller/router if needed
+        messages = [{"role": "user", "content": [{"type": "text", "text": prompt}]}]
         if images:
-            content = [{"type": "text", "text": final_prompt}]
             for img in images:
-                content.append({
+                messages[0]["content"].append({
                     "type": "image_url",
                     "image_url": {"url": f"data:image/jpeg;base64,{img}"}
                 })
-            messages = [{"role": "user", "content": content}]
-        else:
-            messages = [{"role": "user", "content": final_prompt}]
             
         payload = {"model": model_id, "messages": messages}
         if response_format:
@@ -30,30 +26,32 @@ class AIGateway:
 
     @staticmethod
     def call_ai(prompt: str, capability: str = "text", images: list = None, chat_id: str = None, response_format: dict = None) -> str:
-        logger.info(f"[Gateway] Request: capability={capability}")
+        logger.info(f"[Gateway] Request: capability={capability}, images={bool(images)}")
         
-        # 1. Get all available free models for fallback
-        free_models = get_free_models()
-        model_ids = [m.get("id") for m in free_models]
+        # 1. Trigger summarization exactly once
+        if chat_id:
+            SummarizationManager.trigger(chat_id, prompt)
+            context = SummarizationManager.get_context(chat_id, prompt)
+            full_prompt = prompt + context
+        else:
+            full_prompt = prompt
+
+        # 2. Routing Logic
+        if capability in ["vision", "audio"] or images:
+            logger.info("[Router] VISION/AUDIO -> Gemini")
+            image_bytes = base64.b64decode(images[0]) if images else None
+            return generate_gemini_response(prompt_data=image_bytes or full_prompt, is_vision=bool(images))
         
-        # 2. Try OpenRouter models one by one
-        for model_id in model_ids:
-            if chat_id:
-                SummarizationManager.trigger(chat_id, prompt)
-            
-            payload = AIGateway._construct_payload(prompt, model_id, images, chat_id, response_format)
-            
-            response = OpenRouterClient.call_model(model_id, payload)
-            if response:
-                return response
-                
-        # 3. All OpenRouter models failed. Fallback to Gemini.
-        logger.warning("[Gateway] All OpenRouter models failed. Falling back to Gemini.")
-        from ai.gemini_api import generate_gemini_response
+        # Text Routing
+        logger.info("[Router] TEXT -> OpenRouter")
+        model_id = config.MODEL_CONFIG["openrouter"]["primary"]
         
-        # Convert base64 images back to bytes if Gemini needs them
-        image_bytes = None
-        if images:
-            image_bytes = base64.b64decode(images[0])
+        payload = AIGateway._construct_payload(full_prompt, model_id, images, response_format)
+        response = OpenRouterClient.call_model(model_id, payload)
+        
+        if response:
+            return response
             
-        return generate_gemini_response(prompt_data=image_bytes or prompt, is_vision=bool(images))
+        # Fallback to Gemini
+        logger.warning("[Gateway] OpenRouter failed. Falling back to Gemini.")
+        return generate_gemini_response(prompt_data=full_prompt, is_vision=False)
