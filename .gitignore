@@ -1,3 +1,144 @@
+# =========================================================
+# iKALABot - Telegram AI Chat Bot
+# =========================================================
+
+# Secrets / Environment
 .env
+.env.*
+!.env.example
+*.pem
+*.key
+*.crt
+secrets/
+credentials/
+service-account*.json
+google-credentials*.json
+
+# Python
 __pycache__/
-*.pyc
+*.py[cod]
+*.so
+.Python
+build/
+dist/
+*.egg-info/
+.eggs/
+.venv/
+venv/
+env/
+ENV/
+
+# Testing / Coverage
+.pytest_cache/
+.coverage
+.coverage.*
+htmlcov/
+.tox/
+.nox/
+.mypy_cache/
+.pyre/
+.ruff_cache/
+
+# IDE / Editor
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# Logs
+*.log
+logs/
+log/
+*.out
+*.err
+
+# Telegram Runtime
+*.session
+telegram.log
+bot.log
+polling.log
+
+# Audio / Voice Runtime
+*.mp3
+*.wav
+*.ogg
+*.oga
+*.m4a
+*.aac
+*.flac
+*.opus
+*.webm
+
+# Runtime Media
+audio/
+audios/
+voices/
+tmp_audio/
+tmp_voice/
+temp_audio/
+temp_voice/
+uploads/
+downloads/
+media/
+generated/
+generated_files/
+outputs/
+output/
+cache/
+tmp/
+temp/
+
+# Runtime Documents
+*.pdf
+*.docx
+*.xlsx
+*.xls
+*.pptx
+*.ppt
+*.zip
+*.rar
+*.7z
+
+# Database / User Memory
+*.db
+*.sqlite
+*.sqlite3
+*.db-journal
+*.db-wal
+*.db-shm
+memory.db
+
+# Backups
+backup/
+backups/
+*.bak
+*.backup
+*.old
+*.orig
+
+# OS
+Thumbs.db
+Desktop.ini
+.directory
+
+# Node.js / Frontend
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# Render / Deployment temporary files
+.render/
+render.yaml.bak
+
+# Jupyter
+.ipynb_checkpoints/
+
+# Temporary files
+*.tmp
+*.temp
+*.patch
+*.diff
