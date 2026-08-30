@@ -29,23 +29,23 @@ def health_check():
 # 2. Telegram Bot Setup
 # ==========================================
 def run_bot(token):
-    try:
-        bot = telebot.TeleBot(token)
-        init_handlers(bot)
+    while True:
+        try:
+            bot = telebot.TeleBot(token)
+            init_handlers(bot)
 
-        print("Clearing old webhooks...")
-        bot.remove_webhook()
-        print("Starting Telegram Bot Polling...")
-        bot.infinity_polling(timeout=10, long_polling_timeout=5, skip_pending=True)
-    except Exception as e:
-        error_msg = str(e)
-        if "409" in error_msg or "Conflict" in error_msg:
-            print(f"[Telegram][CRITICAL] 409 Conflict detected. PID={os.getpid()}. Polling stopped.")
-            return
-        
-        print(f"[Polling Error]: {e}. Restarting in 5s...")
-        time.sleep(5)
-        run_bot(token)
+            print("Clearing old webhooks...")
+            bot.remove_webhook()
+            print("Starting Telegram Bot Polling...")
+            bot.infinity_polling(timeout=10, long_polling_timeout=5, skip_pending=True)
+        except Exception as e:
+            error_msg = str(e)
+            if "409" in error_msg or "Conflict" in error_msg:
+                print(f"[Telegram][WARNING] 409 Conflict detected. PID={os.getpid()}. Retrying in 10s...")
+                time.sleep(10)
+            else:
+                print(f"[Polling Error]: {e}. Restarting in 5s...")
+                time.sleep(5)
 
 def run_web(port):
     app.run(host="0.0.0.0", port=port, debug=False, use_reloader=False)

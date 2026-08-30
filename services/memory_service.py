@@ -24,6 +24,14 @@ class MemoryStore:
                     updated_at TIMESTAMP
                 )
             """)
+            
+            # Idempotent migration to ensure columns exist
+            columns = [info[1] for info in conn.execute("PRAGMA table_info(memories)")]
+            if 'message_id' not in columns:
+                conn.execute("ALTER TABLE memories ADD COLUMN message_id TEXT")
+            if 'role' not in columns:
+                conn.execute("ALTER TABLE memories ADD COLUMN role TEXT")
+
             # Table for conversation summaries
             conn.execute("""
                 CREATE TABLE IF NOT EXISTS summaries (
