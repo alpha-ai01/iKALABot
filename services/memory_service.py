@@ -34,7 +34,7 @@ class MemoryStore:
             """)
 
     def save_summary(self, chat_id, summary):
-        now = datetime.datetime.now()
+        now = datetime.datetime.now().isoformat()
         with sqlite3.connect(self.db_path) as conn:
             conn.execute("""
                 INSERT OR REPLACE INTO summaries (chat_id, summary, updated_at)
@@ -48,25 +48,33 @@ class MemoryStore:
             return row[0] if row else None
 
     def save_memory(self, user_id, chat_id, message_id, role, text, category="general", importance=1):
-        now = datetime.datetime.now()
+        now = datetime.datetime.now().isoformat()
         with sqlite3.connect(self.db_path) as conn:
             conn.execute("""
                 INSERT INTO memories (user_id, chat_id, message_id, role, text, category, importance, created_at)
                 VALUES (?, ?, ?, ?, ?, ?, ?, ?)
             """, (user_id, chat_id, message_id, role, text, category, importance, now))
 
+    def get_recent_messages(self, chat_id, limit=10):
+        with sqlite3.connect(self.db_path) as conn:
+            cursor = conn.execute("""
+                SELECT role, text FROM memories 
+                WHERE chat_id = ?
+                ORDER BY created_at DESC
+                LIMIT ?
+            """, (chat_id, limit))
+            rows = cursor.fetchall()
+            return [{"role": row[0], "text": row[1]} for row in reversed(rows)]
+
     def search_memory(self, user_id, chat_id, query):
         with sqlite3.connect(self.db_path) as conn:
-            # Re-verify schema for 'role' or just select text
-            # Assuming we want to search text, role was apparently not in the original table
             cursor = conn.execute("""
-                SELECT text FROM memories 
+                SELECT role, text FROM memories 
                 WHERE user_id = ? AND chat_id = ? AND text LIKE ?
                 ORDER BY created_at DESC
                 LIMIT 10
             """, (user_id, chat_id, f"%{query}%"))
-            # Just return text as a string/dict
-            return [{"role": "assistant", "text": row[0]} for row in cursor.fetchall()]
+            return [{"role": row[0], "text": row[1]} for row in cursor.fetchall()]
 
     def list_memories(self, user_id, chat_id):
         with sqlite3.connect(self.db_path) as conn:

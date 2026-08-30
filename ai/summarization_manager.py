@@ -30,7 +30,12 @@ class SummarizationManager:
     @staticmethod
     def get_context(chat_id, prompt):
         context = ""
-        # Add existing memory
+        # Add recent history (last 10 messages)
+        recent_messages = memory_store.get_recent_messages(chat_id, limit=10)
+        if recent_messages:
+            context += "\n\nRecent Conversation History:\n" + "\n".join([f"{m['role']}: {m['text']}" for m in recent_messages])
+            
+        # Add existing memory (search)
         relevant_memories = memory_store.search_memory(user_id="user", chat_id=chat_id, query=prompt)
         if relevant_memories:
             context += "\n\nRelevant Context:\n" + "\n".join([f"{m['role']}: {m['text']}" for m in relevant_memories])

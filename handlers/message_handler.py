@@ -6,9 +6,11 @@ from dispatcher import execute_task
 from utils.response_manager import send_ai_response
 from services.voice_service import VoiceService
 from services import document_service
+from services.memory_service import MemoryStore
 
 # Bot instance will be initialized in main.py
 bot = None
+memory_store = MemoryStore()
 
 def handle_document(message):
     logging.info("DOCUMENT_RECEIVED")
@@ -80,6 +82,11 @@ def init_handlers(bot_instance):
         text = message.text
         if not text:
             return
+        
+        chat_id = str(message.chat.id)
+        
+        # Save user message
+        memory_store.save_memory(str(message.from_user.id), chat_id, str(message.message_id), "user", text)
 
         # Intent classification
         task = "chat"
@@ -91,7 +98,11 @@ def init_handlers(bot_instance):
             task = "search"
 
         bot.send_chat_action(message.chat.id, 'typing')
-        response = execute_task(task, text=text, chat_id=str(message.chat.id))
+        response = execute_task(task, text=text, chat_id=chat_id)
+        
+        # Save bot response
+        memory_store.save_memory("bot", chat_id, "bot_msg", "assistant", str(response))
+        
         send_ai_response(bot, message, str(response))
 
     @bot.message_handler(content_types=['document'])
