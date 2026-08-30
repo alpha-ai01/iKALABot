@@ -98,7 +98,15 @@ def init_handlers(bot_instance):
             task = "search"
 
         bot.send_chat_action(message.chat.id, 'typing')
-        response = execute_task(task, text=text, chat_id=chat_id)
+        
+        # Execute task: if it's a tool (like 'time' or 'search'), 
+        # append the result to the text prompt to let the LLM format the answer.
+        if task in ["time", "search"]:
+            tool_result = execute_task(task, text=text, chat_id=chat_id)
+            prompt = f"User asked: '{text}'.\n\nTool output for context:\n{tool_result}\n\nPlease provide a natural language response based on this tool output."
+            response = execute_task("chat", text=prompt, chat_id=chat_id)
+        else:
+            response = execute_task(task, text=text, chat_id=chat_id)
         
         # Save bot response
         memory_store.save_memory("bot", chat_id, "bot_msg", "assistant", str(response))
