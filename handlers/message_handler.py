@@ -90,23 +90,36 @@ def init_handlers(bot_instance):
 
         # Intent classification
         task = "chat"
-        # Expanded time/date detection
-        time_keywords = ["กี่โมง", "วันที่", "time", "date", "เวลา", "วันนี้", "เดือน", "ปี", "พ.ศ.", "วัน"]
-        if any(k in text.lower() for k in time_keywords):
+        # Time/date routing must only match explicit time/date questions.
+        # Do NOT match generic words such as "ปี" or "วัน" because they are
+        # common in normal questions (for example, history/news questions).
+        normalized_text = text.strip().lower()
+        time_phrases = [
+            "กี่โมงแล้ว",
+            "กี่โมง",
+            "ตอนนี้เวลา",
+            "ขณะนี้เวลา",
+            "เวลาตอนนี้",
+            "เวลาปัจจุบัน",
+            "เวลาอะไร",
+            "วันนี้วันที่",
+            "วันนี้วันอะไร",
+            "วันนี้คือวันอะไร",
+            "ตอนนี้วันอะไร",
+            "ขณะนี้วันอะไร",
+            "วันอะไรวันนี้",
+            "current time",
+            "what time",
+            "what date",
+            "today's date",
+        ]
+        if any(phrase in normalized_text for phrase in time_phrases):
             task = "time"
         elif "ค้นหา" in text:
             task = "search"
 
         bot.send_chat_action(message.chat.id, 'typing')
-        
-        # Execute task: if it's a tool (like 'time' or 'search'), 
-        # append the result to the text prompt to let the LLM format the answer.
-        if task in ["time", "search"]:
-            tool_result = execute_task(task, text=text, chat_id=chat_id)
-            prompt = f"User asked: '{text}'.\n\nTool output for context:\n{tool_result}\n\nPlease provide a natural language response based on this tool output."
-            response = execute_task("chat", text=prompt, chat_id=chat_id)
-        else:
-            response = execute_task(task, text=text, chat_id=chat_id)
+        response = execute_task(task, text=text, chat_id=chat_id)
         
         # Save bot response
         memory_store.save_memory("bot", chat_id, "bot_msg", "assistant", str(response))
