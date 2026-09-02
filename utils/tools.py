@@ -21,7 +21,7 @@ class SearchProvider(abc.ABC):
 class DDGProvider(SearchProvider):
     def search(self, query: str, max_results: int) -> List[Dict[str, str]]:
         try:
-            from ddgs import DDGS
+            from duckduckgo_search import DDGS
             with DDGS() as ddgs:
                 results = list(ddgs.text(query, max_results=max_results))
             return [{'title': r['title'], 'body': r['body'], 'href': r['href']} for r in results]
@@ -32,42 +32,9 @@ class DDGProvider(SearchProvider):
             logging.error(f"DDG Search failed: {e}")
             return []
 
-class GoogleSearchProvider(SearchProvider):
-    def __init__(self, api_key: str, engine_id: str):
-        self.api_key = api_key
-        self.engine_id = engine_id
-
-    def search(self, query: str, max_results: int) -> List[Dict[str, str]]:
-        url = "https://www.googleapis.com/customsearch/v1"
-        params = {
-            "key": self.api_key,
-            "cx": self.engine_id,
-            "q": query,
-            "num": max_results
-        }
-        try:
-            response = requests.get(url, params=params)
-            response.raise_for_status()
-            data = response.json()
-            items = data.get("items", [])
-            return [{'title': item['title'], 'body': item.get('snippet', ''), 'href': item['link']} for item in items]
-        except requests.exceptions.HTTPError as e:
-            if response.status_code == 429:
-                logging.error("Google Search API quota exceeded.")
-            else:
-                logging.error(f"Google Search API error: {e}")
-            return []
-        except Exception as e:
-            logging.error(f"Google Search API failed: {e}")
-            return []
-
 class SearchRouter:
     def __init__(self):
-        self.providers = []
-        # Register providers
-        if os.getenv("GOOGLE_SEARCH_API_KEY") and os.getenv("GOOGLE_SEARCH_ENGINE_ID"):
-             self.providers.append(GoogleSearchProvider(os.getenv("GOOGLE_SEARCH_API_KEY"), os.getenv("GOOGLE_SEARCH_ENGINE_ID")))
-        self.providers.append(DDGProvider())
+        self.providers = [DDGProvider()]
 
     def search(self, query: str, max_results: int = 3) -> str:
         for provider in self.providers:

@@ -1,15 +1,13 @@
 import logging
-import requests
 import config
 
 class SearchRouter:
     def __init__(self):
-        self.google_api_key = config.GOOGLE_SEARCH_API_KEY
-        self.google_cx = config.GOOGLE_SEARCH_CX
+        pass
 
     def search_web(self, query, max_results=3):
         """Unified interface with zero-hallucination constraint."""
-        # 1. Try DuckDuckGo
+        # Try DuckDuckGo
         try:
             from duckduckgo_search import DDGS
             results = []
@@ -20,25 +18,6 @@ class SearchRouter:
                 return self._format_response(query, results)
         except Exception as e:
             logging.error(f"DDG Search failed: {e}")
-
-        # 2. Try Google Search
-        try:
-            if not self.google_api_key or not self.google_cx:
-                raise ValueError("Google Search API not configured.")
-            
-            url = f"https://www.googleapis.com/customsearch/v1?key={self.google_api_key}&cx={self.google_cx}&q={query}&num={max_results}"
-            response = requests.get(url, timeout=10)
-            response.raise_for_status()
-            data = response.json()
-            
-            results = []
-            for item in data.get("items", []):
-                results.append(f"📌 {item.get('title')}\n{item.get('snippet')}\n🔗 {item.get('link')}\n")
-            
-            if results:
-                return self._format_response(query, results)
-        except Exception as e:
-            logging.error(f"Google Search failed: {e}")
 
         return "ไม่พบข้อมูลจากการค้นหา (หรือระบบค้นหาไม่สามารถใช้งานได้)"
 
